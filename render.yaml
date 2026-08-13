@@ -1,0 +1,40 @@
+# Render Blueprint for the PumpGuard DT backend.
+#
+# Committed to the repo so the deployment is reproducible and reviewable rather
+# than a set of settings typed into a web form once and forgotten. Point Render
+# at this repository and it reads this file.
+#
+# The frontend is NOT deployed here -- it is static output and belongs on a CDN
+# host (see frontend/netlify.toml). Serving it from this service would put the
+# whole UI behind the backend's cold start for no benefit.
+
+services:
+  - type: web
+    name: pumpguard-dt-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    region: singapore # closest Render region to Australia; lowest latency for AU recruiters
+    plan: free # see docs/deployment.md on cold starts before putting this on a CV
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATA_SOURCE
+        value: SIMULATION
+      # Comma-separated exact origins. NOT "*": the browser refuses a wildcard
+      # origin on a credentialed request, and a wildcard would also let any site
+      # drive this API. Set this to the real frontend URL after the first
+      # frontend deploy, then redeploy.
+      - key: BACKEND_CORS_ORIGINS
+        sync: false
+      # SQLite on the container filesystem. Render's free disk is ephemeral, so
+      # the historian resets on redeploy -- acceptable for a demo, and called
+      # out in the README rather than hidden. Attach a persistent disk or move
+      # to Postgres via DATABASE_URL when that matters.
+      - key: DATABASE_URL
+        value: sqlite:///./data/pumpguard.db
+      - key: PYTHON_VERSION
+        value: "3.12"

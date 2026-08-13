@@ -1,0 +1,240 @@
+{
+  "name": "PumpGuard DT fault classifier and anomaly detector",
+  "created_at": "2026-08-13T12:27:27.587522+00:00",
+  "feature_order": [
+    "rpm",
+    "flow_lpm",
+    "pump_head_m",
+    "suction_pressure_kpa",
+    "differential_pressure_kpa",
+    "motor_current_a",
+    "motor_temperature_c",
+    "bearing_temperature_c",
+    "vibration_rms_mm_s",
+    "vibration_peak_mm_s",
+    "crest_factor",
+    "amplitude_1x_mm_s",
+    "amplitude_2x_mm_s",
+    "high_frequency_energy",
+    "pump_efficiency",
+    "npsh_margin_m"
+  ],
+  "class_order": [
+    "cavitation",
+    "dry_run",
+    "flow_restriction",
+    "imbalance",
+    "misalignment",
+    "normal",
+    "sensor_fault"
+  ],
+  "contract_class_vocabulary": [
+    "normal",
+    "imbalance",
+    "misalignment",
+    "flow_restriction",
+    "cavitation",
+    "dry_run",
+    "sensor_fault"
+  ],
+  "classifier": {
+    "type": "RandomForestClassifier",
+    "parameters": {
+      "n_estimators": 300,
+      "max_depth": null,
+      "min_samples_leaf": 2,
+      "class_weight": "balanced",
+      "n_jobs": -1,
+      "random_state": 20260812
+    }
+  },
+  "anomaly_detector": {
+    "type": "IsolationForest",
+    "parameters": {
+      "n_estimators": 200,
+      "contamination": 0.02,
+      "random_state": 20260812,
+      "n_jobs": -1
+    },
+    "trained_on": "NORMAL rows only",
+    "score_reference": [
+      0.14039977632178166,
+      -0.07019022600291008
+    ]
+  },
+  "split": {
+    "strategy": "StratifiedGroupKFold on run_id, stratified by class; fold 1 of 4 held out",
+    "why": "Frames inside one run are consecutive ticks of one machine at one operating point and are near-duplicates. A random row split puts near-identical twins on both sides and measures memorisation."
+  },
+  "headline_metrics": {
+    "accuracy": 0.8810483870967742,
+    "f1_macro": 0.9153467693251512,
+    "anomaly_roc_auc": 0.9086342669547871
+  },
+  "dataset_metadata": {
+    "generated_at": "2026-08-13T12:27:20.361898+00:00",
+    "seed": 20260812,
+    "schema": {
+      "metadata_columns": [
+        "run_id",
+        "label",
+        "asset_state",
+        "severity",
+        "rpm_setpoint",
+        "valve_opening",
+        "sensor_tag",
+        "sensor_mode",
+        "elapsed_s"
+      ],
+      "feature_order": [
+        "rpm",
+        "flow_lpm",
+        "pump_head_m",
+        "suction_pressure_kpa",
+        "differential_pressure_kpa",
+        "motor_current_a",
+        "motor_temperature_c",
+        "bearing_temperature_c",
+        "vibration_rms_mm_s",
+        "vibration_peak_mm_s",
+        "crest_factor",
+        "amplitude_1x_mm_s",
+        "amplitude_2x_mm_s",
+        "high_frequency_energy",
+        "pump_efficiency",
+        "npsh_margin_m"
+      ]
+    },
+    "parameters": {
+      "warmup_dt_s": 1.0,
+      "sample_dt_s": 0.2,
+      "sample_stride": 5,
+      "frames_per_run": 24,
+      "max_sample_ticks": 600,
+      "developed_fraction": 0.6,
+      "sensor_lie_sigma": 3.0,
+      "rpm_choices": [
+        1100.0,
+        1180.0,
+        1250.0,
+        1320.0,
+        1400.0,
+        1450.0,
+        1500.0
+      ],
+      "valve_choices": [
+        0.3,
+        0.45,
+        0.6,
+        0.75,
+        0.9,
+        1.0
+      ],
+      "warmup_choices_s": [
+        30.0,
+        90.0,
+        240.0,
+        480.0,
+        900.0
+      ],
+      "severity_choices": [
+        0.15,
+        0.25,
+        0.35,
+        0.5,
+        0.65,
+        0.8,
+        0.95
+      ],
+      "cavitation_severity_choices": [
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.5,
+        0.6,
+        0.75,
+        0.9,
+        1.0
+      ],
+      "dry_run_severity_choices": [
+        0.15,
+        0.25,
+        0.35,
+        0.5,
+        0.65,
+        0.8,
+        0.9
+      ],
+      "sensor_modes": [
+        "bias",
+        "drift",
+        "noise",
+        "dropout"
+      ],
+      "sensor_modes_excluded": {
+        "freeze": "a frozen transmitter reads correctly under steady conditions; only detectable across time, and this feature vector is a single frame"
+      },
+      "sensor_tags": [
+        "FT-101",
+        "PT-101",
+        "PT-102",
+        "CT-101",
+        "ACC-101",
+        "RPM-101"
+      ],
+      "sensor_tags_excluded": {
+        "TT-101": "thermal state depends on run history, which a single frame lacks",
+        "TT-102": "thermal state depends on run history, which a single frame lacks"
+      },
+      "runs_per_class": {
+        "normal": 160,
+        "imbalance": 70,
+        "misalignment": 70,
+        "flow_restriction": 70,
+        "cavitation": 130,
+        "dry_run": 70,
+        "sensor_fault": 150
+      }
+    },
+    "runs_planned": 720,
+    "runs_with_no_usable_frames": [],
+    "row_count": 15879,
+    "class_counts": {
+      "normal": 3840,
+      "sensor_fault": 3004,
+      "cavitation": 2315,
+      "imbalance": 1680,
+      "misalignment": 1680,
+      "flow_restriction": 1680,
+      "dry_run": 1680
+    },
+    "runs_per_class_realised": {
+      "cavitation": 130,
+      "dry_run": 70,
+      "flow_restriction": 70,
+      "imbalance": 70,
+      "misalignment": 70,
+      "normal": 160,
+      "sensor_fault": 150
+    },
+    "source": "app.simulation.engine.SimulationSession, vibration hook not attached",
+    "caveat": "Synthetic data from a physics simulator. Not plant measurements.",
+    "dataset_path": "data\\training_dataset.csv",
+    "metadata_path": "data\\training_dataset_meta.json"
+  },
+  "library_versions": {
+    "scikit-learn": "1.9.0",
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "joblib": "1.5.3"
+  },
+  "intended_use": "Demonstration of a condition-monitoring pipeline on a simulated motor-pump set. Diagnostic support only: the physics rules in app.ml.diagnosis are reported separately and a disagreement between them and this model is surfaced, not hidden.",
+  "performance_is_on_synthetic_data_only": true,
+  "limitations": [
+    "Trained and evaluated exclusively on output from this project's own simulator. The reported scores are NOT an industrial accuracy claim and no statement about real-pump performance can be derived from them.",
+    "The feature vector carries no control-valve position, so a legitimately throttled pump and a partly blocked line present very similar hydraulics.",
+    "A frozen transmitter is not represented: it is only detectable across time, and this model sees one frame. Sensor quality flags cover it in app.ml.diagnosis.",
+    "Vibration features come from the simulator's amplitude-domain estimate. If the signal-processing feature hook is attached to SimulationSession, the vibration feature distribution changes and this model must be retrained."
+  ]
+}

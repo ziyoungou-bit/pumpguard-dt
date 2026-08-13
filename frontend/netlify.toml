@@ -1,0 +1,44 @@
+# Netlify configuration for the PumpGuard DT frontend.
+#
+# Static hosting on a CDN: no cold start, so the landing page a recruiter opens
+# is always instant even when the backend is still waking up. That split is the
+# reason the frontend carries a recorded-demo fallback.
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# React Router owns /dashboard, /vibration and the rest. Those paths do not
+# exist as files, so without this rule a recruiter who refreshes the page -- or
+# opens a link straight to a sub-page from a CV -- gets Netlify's 404 instead of
+# the app. Status 200, not 301: the URL must stay as typed so the router can
+# read it.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    # Vite fingerprints these filenames, so they can be cached hard and for ever.
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    # index.html must NOT be cached: it references the fingerprinted bundles, so
+    # a stale copy would ask for asset filenames that no longer exist and the
+    # page would come up blank after every deploy.
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
