@@ -32,10 +32,19 @@ import time
 from dataclasses import dataclass
 from typing import Iterator
 
+from ..config.alarm_thresholds import ALARM_STARTUP_INHIBIT_S
 from ..contracts import Alarm, DataSource, Telemetry
 from ..storage.historian import Historian
 from ..storage.replay import ReplayStore
 from .providers import DataProvider, build_provider
+
+#: Simulated seconds a new session is advanced before it is handed out, so the
+#: first frame a visitor sees is a settled duty point rather than a stopped
+#: machine or a mid-ramp transient. Twice the start-up alarm inhibit: past the
+#: speed ramp, past the window in which flow and current are legitimately out
+#: of limits, and far enough into steady state that the thermal model has
+#: stopped moving visibly.
+WARM_START_S: float = 2.0 * ALARM_STARTUP_INHIBIT_S
 
 
 class Session:
@@ -163,21 +172,54 @@ class SessionManager:
     # -- creation and lookup ----------------------------------------------
 
     def create(self) -> Session:
-        """A new session with an opaque id.
+        """A new session with an opaque id, already running at duty.
 
         `secrets.token_urlsafe` rather than a counter or a uuid1: the id is the
         only thing standing between one visitor's machine and another's, so it
         must not be guessable from another id.
+
+        The machine is started before the session is handed out. A stopped pump
+        is the correct initial state for a plant and the wrong one for a page a
+        visitor opens cold: every panel reads zero, and a machine at rest is
+        indistinguishable from a site that failed to load. The bundled recording
+        was changed for the same reason; leaving the live path stopped would
+        have meant the offline fallback looked healthy and connecting to the real
+        backend made it worse. Starting is what the visitor would do first
+        anyway, and STOP is one click away on the SCADA page.
         """
         session_id = secrets.token_urlsafe(16)
         provider = build_provider(session_id, self.data_source, self.replay_store)
         session = Session(session_id, provider, self.tick_interval_s, self.historian)
+        self._warm_start(session)
         with self._lock:
             if len(self._sessions) >= self.max_sessions:
                 self._evict_least_recent_locked()
             self._sessions[session_id] = session
             self._created += 1
         return session
+
+    def _warm_start(self, session: Session) -> None:
+        """Bring a fresh simulated machine up to a settled duty point.
+
+        Only for SIMULATION. A recorded session is a fixed dataset with its own
+        timeline -- advancing it here would silently skip the first twenty
+        seconds of somebody's recording -- and the live-device providers do not
+        own the machine and must never command it.
+
+        WARM_START_S is past both the speed ramp and the start-up alarm inhibit,
+        so the first frame a visitor sees is steady rather than mid-transient
+        and carries no start-up alarms. Done outside the lock: it is the only
+        slow step in creation, and holding the dictionary lock across it would
+        make every new visitor wait for the one before them.
+        """
+        if self.data_source is not DataSource.SIMULATION:
+            return
+        outcome = session.provider.command("start")
+        if not outcome.accepted:
+            # Not fatal: the visitor still gets a session, just a stopped one,
+            # and the SCADA page will say why START was refused.
+            return
+        session.advance(WARM_START_S)
 
     def get(self, session_id: str | None) -> Session | None:
         if not session_id:
