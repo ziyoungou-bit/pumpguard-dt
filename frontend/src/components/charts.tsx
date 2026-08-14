@@ -126,13 +126,17 @@ const legendStyle = { fontSize: 12, color: INK } as const
  */
 const STACKED_MARGIN = { top: 16, right: 28, bottom: 44, left: 8 } as const
 const STACKED_LEGEND_STYLE = { ...legendStyle, paddingTop: 26 } as const
-const X_AXIS_LABEL = {
-  value: 'Flow (L/min)',
+
+/** X-axis title placed in its own row, clear of the legend below it. */
+const xAxisLabel = (value: string) => ({
+  value,
   position: 'insideBottom' as const,
   offset: -16,
   fill: INK,
   fontSize: 11,
-}
+})
+
+const X_AXIS_LABEL = xAxisLabel('Flow (L/min)')
 
 /**
  * Vertical drop line at the operating flow. It does two jobs: it ties the point
@@ -164,7 +168,7 @@ export function TimeWaveformChart({
 }) {
   return (
     <ChartFrame height={height}>
-      <LineChart data={data} margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
+      <LineChart data={data} margin={STACKED_MARGIN}>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
         <XAxis
           {...axisProps}
@@ -172,7 +176,7 @@ export function TimeWaveformChart({
           type="number"
           domain={['dataMin', 'dataMax']}
           tickFormatter={(v: number) => v.toFixed(2)}
-          label={{ value: 'Time (s)', position: 'insideBottom', offset: -12, fill: INK, fontSize: 11 }}
+          label={xAxisLabel('Time (s)')}
         />
         <YAxis
           {...axisProps}
@@ -197,7 +201,7 @@ export function TimeWaveformChart({
           dot={false}
           isAnimationActive={false}
         />
-        <Legend wrapperStyle={legendStyle} />
+        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
       </LineChart>
     </ChartFrame>
   )
@@ -211,17 +215,22 @@ export function SpectrumChart({
   data,
   rotationalFrequencyHz,
   bladePassHz,
+  lineFrequencyHz,
   height = 280,
 }: {
   data: { frequency_hz: number; amplitude_mm_s: number }[]
   rotationalFrequencyHz: number
   bladePassHz?: number
+  /** Motor supply frequency. Drawn in its own colour: it is not a shaft order. */
+  lineFrequencyHz?: number
   height?: number
 }) {
-  const marker = (freq: number, text: string, colour: string) => (
+  // Markers alternate label height so that 2x and line frequency -- only 1.67 Hz
+  // apart on this machine -- do not print on top of each other.
+  const marker = (freq: number, text: string, colour: string, dy = 0) => (
     <ReferenceLine
       key={text}
-      x={Number(freq.toFixed(1))}
+      x={Number(freq.toFixed(2))}
       stroke={colour}
       strokeDasharray="4 3"
       strokeWidth={2}
@@ -231,13 +240,14 @@ export function SpectrumChart({
         fill: colour,
         fontSize: 11,
         fontWeight: 600,
+        dy,
       }}
     />
   )
 
   return (
     <ChartFrame height={height}>
-      <AreaChart data={data} margin={{ top: 24, right: 16, bottom: 24, left: 8 }}>
+      <AreaChart data={data} margin={{ ...STACKED_MARGIN, top: 28 }}>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
         <XAxis
           {...axisProps}
@@ -245,13 +255,7 @@ export function SpectrumChart({
           type="number"
           domain={[0, 'dataMax']}
           tickFormatter={(v: number) => v.toFixed(0)}
-          label={{
-            value: 'Frequency (Hz)',
-            position: 'insideBottom',
-            offset: -12,
-            fill: INK,
-            fontSize: 11,
-          }}
+          label={xAxisLabel('Frequency (Hz)')}
         />
         <YAxis
           {...axisProps}
@@ -276,12 +280,17 @@ export function SpectrumChart({
           fillOpacity={0.12}
           isAnimationActive={false}
         />
-        {marker(rotationalFrequencyHz, `1x  ${rotationalFrequencyHz.toFixed(1)} Hz`, SERIES.secondary)}
-        {marker(2 * rotationalFrequencyHz, `2x  ${(2 * rotationalFrequencyHz).toFixed(1)} Hz`, '#4a3aa7')}
-        {bladePassHz
-          ? marker(bladePassHz, `BPF  ${bladePassHz.toFixed(0)} Hz`, INK)
+        {marker(rotationalFrequencyHz, `1x  ${rotationalFrequencyHz.toFixed(2)} Hz`, SERIES.secondary)}
+        {marker(
+          2 * rotationalFrequencyHz,
+          `2x mech  ${(2 * rotationalFrequencyHz).toFixed(2)} Hz`,
+          '#4a3aa7',
+        )}
+        {lineFrequencyHz
+          ? marker(lineFrequencyHz, `line  ${lineFrequencyHz.toFixed(2)} Hz`, '#b4501f', 16)
           : null}
-        <Legend wrapperStyle={legendStyle} />
+        {bladePassHz ? marker(bladePassHz, `BPF  ${bladePassHz.toFixed(0)} Hz`, INK) : null}
+        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
       </AreaChart>
     </ChartFrame>
   )
@@ -709,7 +718,7 @@ export function TrendChart({
 }) {
   return (
     <ChartFrame height={height}>
-      <LineChart data={data} margin={{ top: 8, right: 16, bottom: 20, left: 8 }}>
+      <LineChart data={data} margin={STACKED_MARGIN}>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
         <XAxis
           {...axisProps}
@@ -717,13 +726,7 @@ export function TrendChart({
           type="number"
           domain={['dataMin', 'dataMax']}
           tickFormatter={(v: number) => `${v.toFixed(0)}`}
-          label={{
-            value: 'Elapsed (s)',
-            position: 'insideBottom',
-            offset: -10,
-            fill: INK,
-            fontSize: 11,
-          }}
+          label={xAxisLabel('Elapsed (s)')}
         />
         <YAxis {...axisProps} width={56} domain={['auto', 'auto']} />
         <Tooltip content={<ChartTooltip labelUnit="s" valueUnit={unit} />} />
@@ -749,7 +752,7 @@ export function TrendChart({
           dot={false}
           isAnimationActive={false}
         />
-        <Legend wrapperStyle={legendStyle} />
+        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
       </LineChart>
     </ChartFrame>
   )

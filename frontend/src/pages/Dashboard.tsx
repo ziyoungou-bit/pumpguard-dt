@@ -12,7 +12,7 @@ import { useAppState } from '../state/AppState'
 import { assetStateStatus, healthStatus, limitStatus, severityStatus } from '../lib/status'
 import { fmt, fmtPercent, fmtUnit, fmtClock, humanise } from '../lib/format'
 import { ASSET_TAGS, MOTOR } from '../lib/pumpPhysics'
-import { iso10816Zone } from '../lib/vibration'
+import { vibrationSeverityZone } from '../lib/vibration'
 import { Card, DefinitionRow, Meter, PageHeading, ProvenanceNote, StatTile, StatusBadge } from '../components/ui'
 import { TrendChart } from '../components/charts'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -22,7 +22,7 @@ export function Dashboard() {
   const state = assetStateStatus(telemetry.asset_state)
   const health = healthStatus(telemetry.health_index)
   const severity = severityStatus(diagnosis.severity_label)
-  const zone = iso10816Zone(telemetry.vibration_rms_mm_s)
+  const zone = vibrationSeverityZone(telemetry.vibration_rms_mm_s)
   const activeAlarms = alarms.filter((alarm) => alarm.state === 'ACTIVE')
 
   const trendWindow = history.slice(-240)

@@ -14,7 +14,7 @@ import { useAppState } from '../state/AppState'
 import { fmt, fmtDateTime, fmtPercent, fmtUnit, humanise } from '../lib/format'
 import { healthStatus, severityStatus } from '../lib/status'
 import { ASSET_TAGS } from '../lib/pumpPhysics'
-import { iso10816Zone } from '../lib/vibration'
+import { vibrationSeverityZone } from '../lib/vibration'
 import {
   Card,
   DefinitionRow,
@@ -42,7 +42,7 @@ export function Maintenance() {
 
   const health = healthStatus(diagnosis.health_index)
   const severity = severityStatus(diagnosis.severity_label)
-  const zone = iso10816Zone(telemetry.vibration_rms_mm_s)
+  const zone = vibrationSeverityZone(telemetry.vibration_rms_mm_s)
 
   const generate = () => {
     const now = new Date()

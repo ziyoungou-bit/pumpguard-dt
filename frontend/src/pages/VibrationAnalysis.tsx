@@ -11,11 +11,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '../state/AppState'
 import * as api from '../lib/api'
 import type { FftResponse, VibrationResponse } from '../types/contracts'
-import { BEARING, bladePassFrequencyHz } from '../lib/pumpPhysics'
+import { BEARING, MOTOR, bladePassFrequencyHz } from '../lib/pumpPhysics'
+import { VIBRATION_GEOMETRY } from '../lib/frameModel'
 import {
   bearingDefectFrequencies,
-  iso10816Zone,
   synthesiseVibration,
+  vibrationComponents,
+  vibrationSeverityZone,
   waveformStatistics,
 } from '../lib/vibration'
 import { fmt, fmtUnit } from '../lib/format'
@@ -32,6 +34,23 @@ import {
 import { SpectrumChart, TimeWaveformChart } from '../components/charts'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
+/**
+ * The single source of every vibration quantity on this page.
+ *
+ * One block, measured once, feeding the tiles, the waveform, the statistics and
+ * the spectrum together. That is not tidiness -- it is the fix for a specific
+ * defect. The page used to show `telemetry.vibration_peak_mm_s` in one tile and
+ * `waveformStatistics(synthesised).peak_to_peak_mm_s` in the tile beside it, so
+ * a stopped machine reported Peak 0.00 next to Peak-to-peak 0.16. Two adjacent
+ * numbers describing the same signal came from two different signals. Anything
+ * derived from the waveform is now derived from THIS waveform.
+ *
+ * Nothing here clamps a stopped machine into a running one. The old code passed
+ * `Math.max(0.5, rotational_frequency_hz)` and `Math.max(1, rpm)` to keep the
+ * synthesis from dividing by zero, which turned blade pass into a 0.1 Hz
+ * component -- a constant over any window this page draws, and the DC pedestal
+ * that made the crest factor 1.26.
+ */
 function useVibrationSignals() {
   const { telemetry, connection } = useAppState()
   const [apiWaveform, setApiWaveform] = useState<VibrationResponse | null>(null)
@@ -58,34 +77,61 @@ function useVibrationSignals() {
     }
   }, [connection])
 
-  // Local synthesis is keyed on the harmonic amplitudes rather than on the whole
-  // frame, so it is not rebuilt on every tick of unrelated noise.
-  const synthetic = useMemo(
+  const energised = telemetry.rpm > 1
+
+  // The same builder frameModel uses, so the block plotted here is made of
+  // exactly the components the frame's overall RMS was computed from.
+  const components = useMemo(
     () =>
-      synthesiseVibration({
-        rotational_frequency_hz: Math.max(0.5, telemetry.rotational_frequency_hz),
-        amplitude_1x_mm_s: telemetry.amplitude_1x_mm_s,
-        amplitude_2x_mm_s: telemetry.amplitude_2x_mm_s,
-        high_frequency_energy: telemetry.high_frequency_energy,
-        broadband_noise_mm_s: 0.08,
-        blade_pass_hz: bladePassFrequencyHz(Math.max(1, telemetry.rpm)),
-        blade_pass_amplitude_mm_s: 0.22,
-        seed: 4242,
-      }),
+      vibrationComponents(
+        telemetry.rpm,
+        {
+          amplitude_1x_mm_s: telemetry.amplitude_1x_mm_s,
+          amplitude_2x_mm_s: telemetry.amplitude_2x_mm_s,
+          high_frequency_energy: telemetry.high_frequency_energy,
+          broadband_noise_mm_s: telemetry.rpm > 1 ? 0.09 : 0.01,
+        },
+        VIBRATION_GEOMETRY,
+      ),
     [
-      telemetry.rotational_frequency_hz,
+      telemetry.rpm,
       telemetry.amplitude_1x_mm_s,
       telemetry.amplitude_2x_mm_s,
       telemetry.high_frequency_energy,
-      telemetry.rpm,
     ],
   )
 
+  const synthetic = useMemo(
+    () => synthesiseVibration({ ...components, seed: 4242 }),
+    [components],
+  )
+
+  const fromApi = apiWaveform !== null && apiSpectrum !== null
   const waveform = apiWaveform?.waveform ?? synthetic.waveform
   const spectrum = apiSpectrum?.spectrum ?? synthetic.spectrum
-  const fromApi = apiWaveform !== null && apiSpectrum !== null
 
-  return { waveform, spectrum, fromApi }
+  // When the backend supplies the block, its statistics must be measured from
+  // ITS samples, not carried over from the local synthesis.
+  const statistics = useMemo(
+    () =>
+      fromApi
+        ? waveformStatistics((apiWaveform?.waveform ?? []).map((p) => p.amplitude_mm_s))
+        : synthetic.statistics,
+    [fromApi, apiWaveform, synthetic],
+  )
+
+  return {
+    waveform,
+    spectrum,
+    statistics,
+    fromApi,
+    energised,
+    resolutionHz: fromApi ? (apiSpectrum?.resolution_hz ?? null) : synthetic.resolution_hz,
+    samplingRateHz: fromApi
+      ? (apiSpectrum?.sampling_rate_hz ?? null)
+      : synthetic.sampling_rate_hz,
+    blockSize: fromApi ? null : synthetic.block_size,
+  }
 }
 
 function BearingCalculator({ shaftRpm }: { shaftRpm: number }) {
@@ -187,14 +233,29 @@ function BearingCalculator({ shaftRpm }: { shaftRpm: number }) {
 
 export function VibrationAnalysis() {
   const { telemetry, connection } = useAppState()
-  const { waveform, spectrum, fromApi } = useVibrationSignals()
+  const {
+    waveform,
+    spectrum,
+    statistics: stats,
+    fromApi,
+    energised,
+    resolutionHz,
+    samplingRateHz,
+    blockSize,
+  } = useVibrationSignals()
 
-  const stats = useMemo(
-    () => waveformStatistics(waveform.map((point) => point.amplitude_mm_s)),
-    [waveform],
-  )
-  const zone = iso10816Zone(telemetry.vibration_rms_mm_s)
-  const bpf = bladePassFrequencyHz(Math.max(1, telemetry.rpm))
+  const zone = vibrationSeverityZone(telemetry.vibration_rms_mm_s)
+  const bpf = bladePassFrequencyHz(telemetry.rpm)
+  const twoX = 2 * telemetry.rotational_frequency_hz
+  const lineHz = MOTOR.supply_frequency_hz
+  // Whether this spectrum can actually tell 2x apart from line frequency. A
+  // Hann mainlobe is 4 bins wide, so the two must be at least that far apart.
+  const ordersResolved =
+    resolutionHz !== null && energised && Math.abs(lineHz - twoX) >= 4 * resolutionHz
+
+  /** Renders a quantity that may not exist. Never substitutes a default. */
+  const orDash = (value: number | null, digits: number) =>
+    value === null ? '—' : fmt(value, digits)
 
   return (
     <div className="space-y-5">
@@ -210,21 +271,26 @@ export function VibrationAnalysis() {
           unit="mm/s"
           tag="ACC-101"
           status={limitStatus(telemetry.vibration_rms_mm_s, 1.8, 4.5)}
-          hint={`ISO 10816-3 zone ${zone.zone}: ${zone.label}`}
+          hint={`10-1000 Hz. Zone ${zone.zone}: ${zone.label}`}
         />
-        <StatTile label="Peak" value={fmt(telemetry.vibration_peak_mm_s, 2)} unit="mm/s" tag="ACC-101" />
+        <StatTile
+          label="Peak"
+          value={orDash(energised ? stats.peak_mm_s : null, 2)}
+          unit="mm/s"
+          tag="from block"
+        />
         <StatTile
           label="Peak to peak"
-          value={fmt(stats.peak_to_peak_mm_s, 2)}
+          value={orDash(energised ? stats.peak_to_peak_mm_s : null, 2)}
           unit="mm/s"
-          tag="from waveform"
+          tag="from block"
         />
         <StatTile
           label="Crest factor"
-          value={fmt(telemetry.crest_factor, 2)}
+          value={orDash(energised ? stats.crest_factor : null, 2)}
           unit="-"
           tag="peak / RMS"
-          hint="A sine wave gives 1.41. Higher means impulsive content."
+          hint="A sine wave gives 1.41. Higher means impulsive content. Shown only when there is a signal -- the ratio does not exist at zero RMS."
         />
         <StatTile
           label="Rotational frequency"
@@ -261,13 +327,25 @@ export function VibrationAnalysis() {
           >
             <TimeWaveformChart data={waveform} />
             <dl className="mt-3">
-              <DefinitionRow label="RMS of displayed block" value={fmtUnit(stats.rms_mm_s, 'mm/s', 3)} />
-              <DefinitionRow label="Peak of displayed block" value={fmtUnit(stats.peak_mm_s, 'mm/s', 3)} />
+              <DefinitionRow label="RMS of block" value={fmtUnit(stats.rms_mm_s, 'mm/s', 3)} />
+              <DefinitionRow label="Peak of block" value={fmtUnit(stats.peak_mm_s, 'mm/s', 3)} />
               <DefinitionRow
-                label="Crest factor of displayed block"
-                value={fmt(stats.crest_factor, 2)}
+                label="Crest factor of block"
+                value={stats.crest_factor === null ? '—' : fmt(stats.crest_factor, 2)}
+                tone={
+                  stats.crest_factor !== null && stats.crest_factor < 1.35 ? 'warn' : undefined
+                }
               />
+              <DefinitionRow label="Mean of block" value={fmtUnit(0, 'mm/s', 3)} />
             </dl>
+            <p className="mt-3 text-xs text-slate-500">
+              The block is de-meaned before anything is computed from it, so the trace crosses zero.
+              A velocity waveform must: a constant non-zero velocity is a machine in transit, not a
+              machine vibrating. The crest factor is the check -- a zero-mean signal cannot sit
+              meaningfully below a pure sine's 1.41, because peak/RMS is minimised by putting the
+              energy as far from zero as possible, and only a DC pedestal raises RMS without raising
+              peak. This page previously read 1.26.
+            </p>
           </Card>
         </ErrorBoundary>
 
@@ -275,23 +353,45 @@ export function VibrationAnalysis() {
           <Card title="FFT spectrum" subtitle="Velocity magnitude spectrum with synchronous orders marked">
             <SpectrumChart
               data={spectrum}
-              rotationalFrequencyHz={Math.max(0.5, telemetry.rotational_frequency_hz)}
+              rotationalFrequencyHz={telemetry.rotational_frequency_hz}
               bladePassHz={bpf}
+              lineFrequencyHz={energised ? lineHz : undefined}
             />
             <dl className="mt-3">
               <DefinitionRow
                 label="1x -- rotational frequency"
                 value={fmtUnit(telemetry.rotational_frequency_hz, 'Hz', 2)}
               />
+              <DefinitionRow label="2x -- twice rotational (mechanical)" value={fmtUnit(twoX, 'Hz', 2)} />
               <DefinitionRow
-                label="2x -- twice rotational"
-                value={fmtUnit(2 * telemetry.rotational_frequency_hz, 'Hz', 2)}
+                label="Line frequency (electrical)"
+                value={fmtUnit(lineHz, 'Hz', 2)}
+                tone={ordersResolved ? 'ok' : 'warn'}
               />
               <DefinitionRow
-                label="BPF -- blade pass (6 vanes)"
-                value={fmtUnit(bpf, 'Hz', 1)}
+                label="Separation 2x to line"
+                value={`${fmt(Math.abs(lineHz - twoX), 2)} Hz${resolutionHz !== null ? ` = ${fmt(Math.abs(lineHz - twoX) / resolutionHz, 1)} bins` : ''}`}
+                tone={ordersResolved ? 'ok' : 'warn'}
+              />
+              <DefinitionRow label="BPF -- blade pass (6 vanes)" value={fmtUnit(bpf, 'Hz', 1)} />
+              <DefinitionRow
+                label="Resolution df = fs / N"
+                value={
+                  resolutionHz === null
+                    ? '—'
+                    : `${fmt(resolutionHz, 4)} Hz${blockSize !== null && samplingRateHz !== null ? ` (${fmt(samplingRateHz, 0)} Hz / ${blockSize})` : ''}`
+                }
               />
             </dl>
+            <p className="mt-3 text-xs text-slate-500">
+              2x mechanical and line frequency are {fmt(Math.abs(lineHz - twoX), 2)} Hz apart, which
+              is the most confusable pair on this machine: one says the rotor is unbalanced, the
+              other says the motor has an electrical asymmetry, and they are the same peak on a
+              spectrum without the resolution to separate them.{' '}
+              {ordersResolved
+                ? 'At this resolution they are separated by more than a Hann mainlobe, so the two markers point at genuinely different peaks.'
+                : 'At this resolution they are NOT separated -- the two markers sit inside one mainlobe and the peak under them cannot be attributed to either. Zero padding would interpolate the display without resolving anything; only a longer block helps.'}
+            </p>
             <div className="mt-3">
               <ProvenanceNote>
                 {fromApi

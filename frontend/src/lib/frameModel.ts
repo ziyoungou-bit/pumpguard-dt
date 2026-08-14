@@ -24,6 +24,25 @@ import {
   rotationalFrequencyHz,
   solveOperatingPoint,
 } from './pumpPhysics'
+import { componentsRms, vibrationComponents } from './vibration'
+
+/**
+ * Machine geometry the vibration component model needs. Passed in rather than
+ * imported inside ./vibration so that module stays free of pump specifics and
+ * can be tested against any machine.
+ */
+export const VIBRATION_GEOMETRY = {
+  vanes: PUMP.impeller_vanes,
+  rated_rpm: MOTOR.rated_speed_rpm,
+  supply_frequency_hz: MOTOR.supply_frequency_hz,
+}
+
+/**
+ * Crest factor of a healthy block of this machine's signature, measured from
+ * synthesiseVibration rather than assumed. Six components, one of them a
+ * broadband band, do not give a sine's 1.41.
+ */
+export const HEALTHY_CREST_FACTOR = 2.25
 
 export interface FrameInputs {
   elapsed_s: number
@@ -150,9 +169,33 @@ export function computeFrame(i: FrameInputs): Telemetry {
   }
 
   const noiseFloor = (rpm > 0 ? 0.09 : 0.01) * noiseScale
-  const rms = Math.sqrt(a1x * a1x + a2x * a2x + hfEnergy * hfEnergy + noiseFloor * noiseFloor)
+  // The frame's overall RMS must be computed from the SAME component set the
+  // Vibration page plots and measures, or the tile and the block statistics
+  // describe two different signals. Vane pass and line frequency were missing
+  // from this sum while being present in the plotted block, which is why those
+  // two numbers could never be made to agree.
+  const components = vibrationComponents(
+    rpm,
+    {
+      amplitude_1x_mm_s: a1x,
+      amplitude_2x_mm_s: a2x,
+      high_frequency_energy: hfEnergy,
+      broadband_noise_mm_s: noiseFloor,
+      // Vane passing is hydraulic: it collapses with the liquid on a dry run.
+      vane_pass_scale: dryRun ? 1 - dryLoss : 1,
+    },
+    VIBRATION_GEOMETRY,
+  )
+  const rms = componentsRms(components)
+  // Calibrated against synthesiseVibration, not assumed. The baseline used to be
+  // sqrt(2) -- the crest factor of a single sine -- but this machine's healthy
+  // signature is six components including a broadband band, and a block of it
+  // measures about 2.25. Reporting 1.41 here while the Vibration page measured
+  // 2.27 from the same components is the same class of defect as the vane-pass
+  // pedestal: two numbers with one name. vibration.test.ts asserts that this
+  // constant still matches what the synthesis produces.
   const crest =
-    Math.SQRT2 + (cavitating || dryRun ? 1.5 * severity : 0.25 * severity) + i.rand() * 0.08
+    HEALTHY_CREST_FACTOR + (cavitating || dryRun ? 1.5 * severity : 0.25 * severity) + i.rand() * 0.08
   const peak = rms * crest
 
   const npshMargin =

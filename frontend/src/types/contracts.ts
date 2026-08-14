@@ -210,6 +210,18 @@ export interface FftResponse {
   amplitude_2x_mm_s: number
   dominant_frequency_hz: number
   high_frequency_energy: number
+  /**
+   * Analysis parameters of the block this spectrum was measured from.
+   *
+   * Carried with the data because resolution is a property OF the data, not of
+   * the viewer, and whether two nearby orders can be told apart is a question
+   * only these numbers can answer. 2x mechanical and line frequency sit 1.67 Hz
+   * apart on this machine; without df on the wire the UI would have to guess
+   * whether the peak it is labelling is one, the other, or both.
+   */
+  resolution_hz: number
+  sampling_rate_hz: number
+  block_size: number
 }
 
 /** GET /api/bearing-frequencies -- theoretical, never "detected faults" */

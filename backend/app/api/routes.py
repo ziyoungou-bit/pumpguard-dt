@@ -438,6 +438,13 @@ def fft(session: Session = Depends(resolve_session)) -> dict[str, Any]:
         "amplitude_2x_mm_s": round(features.amplitude_2x_mm_s, 5),
         "dominant_frequency_hz": round(features.dominant_frequency_hz, 4),
         "high_frequency_energy": round(features.high_frequency_energy, 5),
+        # Analysis parameters travel with the data. Resolution is a property of
+        # the block, and whether two nearby orders are separable is a question
+        # only these numbers answer -- 2x mechanical and line frequency are
+        # 1.67 Hz apart on this machine, which df decides.
+        "resolution_hz": round(spectrum.resolution_hz, 6),
+        "sampling_rate_hz": round(spectrum.sampling_rate_hz, 3),
+        "block_size": int(waveform.sampling.block_size),
         "markers": [
             {"label": "1x", "frequency_hz": round(f_r, 4), "amplitude_mm_s": round(features.amplitude_1x_mm_s, 5)},
             {"label": "2x", "frequency_hz": round(2.0 * f_r, 4), "amplitude_mm_s": round(features.amplitude_2x_mm_s, 5)},
