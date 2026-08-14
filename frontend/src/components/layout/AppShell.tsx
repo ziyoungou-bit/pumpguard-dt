@@ -27,6 +27,7 @@ import {
   Waves,
   Wrench,
   X,
+  Zap,
 } from 'lucide-react'
 import { useAppState, dataSourceLabel, datasetClock } from '../../state/AppState'
 import { useUiPrefs } from '../../state/UiPrefs'
@@ -47,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/app/digital-twin', label: 'Digital Twin', icon: Boxes },
   { to: '/app/vibration', label: 'Vibration Analysis', icon: Waves },
   { to: '/app/pump-performance', label: 'Pump Performance', icon: Gauge },
+  { to: '/app/energy', label: 'Energy: VSD vs Throttle', icon: Zap },
   { to: '/app/diagnosis', label: 'Fault Diagnosis', icon: Stethoscope },
   { to: '/app/simulation', label: 'Simulation Lab', icon: ToyBrick, advanced: true },
   { to: '/app/scada', label: 'SCADA Control', icon: SlidersHorizontal },

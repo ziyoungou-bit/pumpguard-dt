@@ -698,6 +698,146 @@ export function NpshCurveChart({
 }
 
 // --------------------------------------------------------------------------
+// Throttling vs variable speed on one H-Q plane
+// --------------------------------------------------------------------------
+
+/**
+ * Two ways to reach the same flow, drawn so the difference is a direction
+ * rather than a number.
+ *
+ * Throttling holds the pump curve still and steepens the system curve, so the
+ * operating point climbs UP the rated pump curve to the left. Variable speed
+ * holds the system curve still and shrinks the pump curve, so the point slides
+ * DOWN to the left. Same flow, opposite directions, and the vertical gap
+ * between the two points is the head the throttled case is generating and then
+ * destroying across a valve.
+ */
+export function VsdComparisonChart({
+  data,
+  throttlePoint,
+  vsdPoint,
+  height = 340,
+}: {
+  data: {
+    flow_lpm: number
+    rated_pump_head_m: number
+    vsd_pump_head_m: number
+    open_system_head_m: number
+    throttled_system_head_m: number
+  }[]
+  throttlePoint: { flow_lpm: number; head_m: number }
+  vsdPoint: { flow_lpm: number; head_m: number }
+  height?: number
+}) {
+  return (
+    <ChartFrame height={height}>
+      <LineChart data={data} margin={STACKED_MARGIN}>
+        <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+        <XAxis
+          {...axisProps}
+          dataKey="flow_lpm"
+          type="number"
+          domain={[0, 'dataMax']}
+          tickFormatter={(v: number) => v.toFixed(0)}
+          label={X_AXIS_LABEL}
+        />
+        <YAxis
+          {...axisProps}
+          width={56}
+          domain={[0, 14]}
+          label={{
+            value: 'Head (m)',
+            angle: -90,
+            position: 'insideLeft',
+            fill: INK,
+            fontSize: 11,
+            style: { textAnchor: 'middle' },
+          }}
+        />
+        <Tooltip content={<ChartTooltip labelUnit="L/min" valueUnit="m" />} />
+        <Line
+          type="monotone"
+          dataKey="rated_pump_head_m"
+          name="Pump curve at rated speed"
+          stroke={SERIES.primary}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="vsd_pump_head_m"
+          name="Pump curve at reduced speed"
+          stroke={SERIES.primary}
+          strokeWidth={2}
+          strokeDasharray="6 3"
+          dot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="throttled_system_head_m"
+          name="System curve, valve throttled"
+          stroke={SERIES.secondary}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="open_system_head_m"
+          name="System curve, valve open"
+          stroke={SERIES.secondary}
+          strokeWidth={2}
+          strokeDasharray="6 3"
+          dot={false}
+          isAnimationActive={false}
+        />
+        <ReferenceLine
+          x={Number(throttlePoint.flow_lpm.toFixed(2))}
+          stroke="#0b0b0b"
+          strokeDasharray="2 3"
+          strokeWidth={1}
+        />
+        <ReferenceDot
+          x={Number(throttlePoint.flow_lpm.toFixed(2))}
+          y={Number(throttlePoint.head_m.toFixed(2))}
+          r={7}
+          fill={SERIES.secondary}
+          stroke="#ffffff"
+          strokeWidth={2}
+          label={{
+            value: `Throttled  ${throttlePoint.head_m.toFixed(2)} m`,
+            position: 'top',
+            offset: 12,
+            fill: '#a1421a',
+            fontSize: 11,
+            fontWeight: 600,
+          }}
+        />
+        <ReferenceDot
+          x={Number(vsdPoint.flow_lpm.toFixed(2))}
+          y={Number(vsdPoint.head_m.toFixed(2))}
+          r={7}
+          fill={SERIES.primary}
+          stroke="#ffffff"
+          strokeWidth={2}
+          label={{
+            value: `Variable speed  ${vsdPoint.head_m.toFixed(2)} m`,
+            position: 'bottom',
+            offset: 12,
+            fill: '#1d5aa3',
+            fontSize: 11,
+            fontWeight: 600,
+          }}
+        />
+        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
+      </LineChart>
+    </ChartFrame>
+  )
+}
+
+// --------------------------------------------------------------------------
 // Trend -- one signal, one chart. Multiple signals become small multiples.
 // --------------------------------------------------------------------------
 

@@ -12,6 +12,7 @@ import { Landing } from './pages/Landing'
 import { Dashboard } from './pages/Dashboard'
 import { VibrationAnalysis } from './pages/VibrationAnalysis'
 import { PumpPerformance } from './pages/PumpPerformance'
+import { EnergyComparison } from './pages/EnergyComparison'
 import { FaultDiagnosis } from './pages/FaultDiagnosis'
 import { SimulationLab } from './pages/SimulationLab'
 import { ScadaControl } from './pages/ScadaControl'
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="digital-twin" element={<Page name="Digital Twin"><DigitalTwinPage /></Page>} />
         <Route path="vibration" element={<Page name="Vibration Analysis"><VibrationAnalysis /></Page>} />
         <Route path="pump-performance" element={<Page name="Pump Performance"><PumpPerformance /></Page>} />
+        <Route path="energy" element={<Page name="Energy: throttling vs variable speed"><EnergyComparison /></Page>} />
         <Route path="diagnosis" element={<Page name="Fault Diagnosis"><FaultDiagnosis /></Page>} />
         <Route path="simulation" element={<Page name="Simulation Lab"><SimulationLab /></Page>} />
         <Route path="scada" element={<Page name="SCADA Control"><ScadaControl /></Page>} />

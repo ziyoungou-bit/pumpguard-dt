@@ -300,6 +300,58 @@ export interface CurveSample {
   npsh_required_m: number
 }
 
+/**
+ * Valve opening that throttles the pump to a target flow at a given speed, or
+ * null when the target is unreachable.
+ *
+ * Inverts the intersection. Q* = sqrt((H0 - Hs)/(a + K)) rearranges to
+ *
+ *     K_total = (H0 - Hs)/Q*^2 - a
+ *
+ * and the valve part follows from valveResistance's 1/opening^2 form:
+ *
+ *     opening = sqrt(R_open / K_valve)
+ *
+ * Returns null above the fully-open flow -- a valve can only add resistance, so
+ * no opening produces more flow than having it wide open.
+ */
+export function valveOpeningForFlow(targetFlowLpm: number, speedRpm: number): number | null {
+  if (targetFlowLpm <= 0 || speedRpm <= 0) return null
+  const shutoff = PUMP.shutoff_head_m * Math.pow(speedRpm / PUMP.rated_speed_rpm, 2)
+  if (shutoff <= CIRCUIT.static_head_m) return null
+  const flowM3s = lpmToM3s(targetFlowLpm)
+  const totalResistance = (shutoff - CIRCUIT.static_head_m) / (flowM3s * flowM3s) - HEAD_COEFFICIENT
+  const valvePart = totalResistance - CIRCUIT.pipe_resistance
+  if (valvePart <= CIRCUIT.valve_resistance_open) return 1
+  const opening = Math.sqrt(CIRCUIT.valve_resistance_open / valvePart)
+  return Math.min(1, Math.max(0.01, opening))
+}
+
+/**
+ * Speed that delivers a target flow at a given valve opening, or null when the
+ * target is unreachable.
+ *
+ *     H_required = Hs + (a + K) Q*^2        (both curves at the target flow)
+ *     N = N_rated sqrt(H_required / H0_rated)
+ *
+ * Note what this is NOT: it is not N_rated * (Q/Q_rated). The affinity law
+ * Q ~ N describes points on the PUMP curve, and the operating point only
+ * follows it when the system curve passes through the origin. This circuit has
+ * 2 m of static head, so the pump must still produce that 2 m at any speed and
+ * the required speed falls more slowly than the flow does. Using the affinity
+ * shortcut here is the single most common error in a variable-speed retrofit
+ * business case, and it always errs on the optimistic side.
+ */
+export function speedForFlow(targetFlowLpm: number, valveOpening: number): number | null {
+  if (targetFlowLpm <= 0) return null
+  const flowM3s = lpmToM3s(targetFlowLpm)
+  const requiredHead =
+    CIRCUIT.static_head_m +
+    (HEAD_COEFFICIENT + systemResistance(valveOpening)) * flowM3s * flowM3s
+  const speed = PUMP.rated_speed_rpm * Math.sqrt(requiredHead / PUMP.shutoff_head_m)
+  return Number.isFinite(speed) && speed > 0 ? speed : null
+}
+
 /** Sampled pump, system, efficiency, power and NPSH curves for plotting. */
 export function curveSeries(
   speedRpm: number,
