@@ -25,6 +25,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
@@ -113,6 +114,42 @@ function ChartFrame({ height, children }: { height: number; children: ReactNode 
 }
 
 const legendStyle = { fontSize: 12, color: INK } as const
+
+/**
+ * Bottom band shared by the four stacked panels on the Pump Performance page.
+ *
+ * Recharts draws an `insideBottom` x-axis label and a bottom `Legend` into the
+ * same strip below the plot area, so the two overlap and the axis title lands
+ * on top of the legend text ("Pump effi~Flow (L/min)~ciency"). The fix is to
+ * reserve enough bottom margin for the axis title and then push the legend
+ * below it with padding, so each owns its own row.
+ */
+const STACKED_MARGIN = { top: 16, right: 28, bottom: 44, left: 8 } as const
+const STACKED_LEGEND_STYLE = { ...legendStyle, paddingTop: 26 } as const
+const X_AXIS_LABEL = {
+  value: 'Flow (L/min)',
+  position: 'insideBottom' as const,
+  offset: -16,
+  fill: INK,
+  fontSize: 11,
+}
+
+/**
+ * Vertical drop line at the operating flow. It does two jobs: it ties the point
+ * back to the flow axis without a label sitting on the curve, and because every
+ * stacked panel draws it at the same x it visually locks the four panels
+ * together as one reading of one machine state.
+ */
+function OperatingFlowLine({ flowLpm }: { flowLpm: number }) {
+  return (
+    <ReferenceLine
+      x={Number(flowLpm.toFixed(2))}
+      stroke="#0b0b0b"
+      strokeDasharray="2 3"
+      strokeWidth={1}
+    />
+  )
+}
 
 // --------------------------------------------------------------------------
 // Vibration time waveform
@@ -258,16 +295,19 @@ export function PumpCurveChart({
   data,
   operatingFlowLpm,
   operatingHeadM,
+  noIntersection = false,
   height = 300,
 }: {
   data: { flow_lpm: number; pump_head_m: number; system_head_m: number }[]
   operatingFlowLpm: number
   operatingHeadM: number
+  /** Pump head never reaches the static head, so the curves do not cross. */
+  noIntersection?: boolean
   height?: number
 }) {
   return (
     <ChartFrame height={height}>
-      <LineChart data={data} margin={{ top: 12, right: 24, bottom: 24, left: 8 }}>
+      <LineChart data={data} margin={STACKED_MARGIN}>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
         <XAxis
           {...axisProps}
@@ -275,7 +315,7 @@ export function PumpCurveChart({
           type="number"
           domain={[0, 'dataMax']}
           tickFormatter={(v: number) => v.toFixed(0)}
-          label={{ value: 'Flow (L/min)', position: 'insideBottom', offset: -12, fill: INK, fontSize: 11 }}
+          label={X_AXIS_LABEL}
         />
         <YAxis
           {...axisProps}
@@ -309,22 +349,42 @@ export function PumpCurveChart({
           dot={false}
           isAnimationActive={false}
         />
-        <ReferenceDot
-          x={Number(operatingFlowLpm.toFixed(2))}
-          y={Number(operatingHeadM.toFixed(2))}
-          r={7}
-          fill="#0b0b0b"
-          stroke="#ffffff"
-          strokeWidth={2}
-          label={{
-            value: `Operating point  ${operatingFlowLpm.toFixed(1)} L/min, ${operatingHeadM.toFixed(2)} m`,
-            position: 'right',
-            fill: '#0b0b0b',
-            fontSize: 11,
-            fontWeight: 600,
-          }}
-        />
-        <Legend wrapperStyle={legendStyle} />
+        {noIntersection ? (
+          <ReferenceLine
+            y={0}
+            stroke="transparent"
+            label={{
+              value: 'No intersection -- pump head below static head',
+              position: 'center',
+              fill: '#b4501f',
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          />
+        ) : (
+          <>
+            <OperatingFlowLine flowLpm={operatingFlowLpm} />
+            <ReferenceDot
+              x={Number(operatingFlowLpm.toFixed(2))}
+              y={Number(operatingHeadM.toFixed(2))}
+              r={7}
+              fill="#0b0b0b"
+              stroke="#ffffff"
+              strokeWidth={2}
+              // Above the dot rather than beside it: the two curves cross here,
+              // so anything placed to the right lands on top of one of them.
+              label={{
+                value: `${operatingFlowLpm.toFixed(1)} L/min, ${operatingHeadM.toFixed(2)} m`,
+                position: 'top',
+                offset: 12,
+                fill: '#0b0b0b',
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            />
+          </>
+        )}
+        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
       </LineChart>
     </ChartFrame>
   )
@@ -340,17 +400,22 @@ export function EfficiencyCurveChart({
   operatingFlowLpm,
   operatingEfficiencyPct,
   bepFlowLpm,
+  peakEfficiencyPct,
   height = 220,
 }: {
   data: { flow_lpm: number; pump_efficiency: number }[]
   operatingFlowLpm: number
   operatingEfficiencyPct: number
+  /** BEP flow AT THE CURRENT SPEED. Q_BEP ~ N, so this marker moves. */
   bepFlowLpm: number
+  peakEfficiencyPct: number
   height?: number
 }) {
+  // Head room above the peak so the BEP label is never clipped by the top edge.
+  const yMax = Math.ceil((peakEfficiencyPct * 1.35) / 10) * 10
   return (
     <ChartFrame height={height}>
-      <LineChart data={data} margin={{ top: 12, right: 24, bottom: 24, left: 8 }}>
+      <LineChart data={data} margin={STACKED_MARGIN}>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
         <XAxis
           {...axisProps}
@@ -358,12 +423,12 @@ export function EfficiencyCurveChart({
           type="number"
           domain={[0, 'dataMax']}
           tickFormatter={(v: number) => v.toFixed(0)}
-          label={{ value: 'Flow (L/min)', position: 'insideBottom', offset: -12, fill: INK, fontSize: 11 }}
+          label={X_AXIS_LABEL}
         />
         <YAxis
           {...axisProps}
           width={56}
-          domain={[0, 70]}
+          domain={[0, yMax]}
           label={{
             value: 'Efficiency (%)',
             angle: -90,
@@ -375,20 +440,26 @@ export function EfficiencyCurveChart({
         />
         <Tooltip content={<ChartTooltip labelUnit="L/min" valueUnit="%" />} />
         <ReferenceLine
-          x={bepFlowLpm}
+          x={Number(bepFlowLpm.toFixed(2))}
           stroke={INK}
           strokeDasharray="4 3"
-          label={{ value: `BEP ${bepFlowLpm} L/min`, position: 'top', fill: INK, fontSize: 11 }}
+          label={{
+            value: `BEP ${bepFlowLpm.toFixed(1)} L/min`,
+            position: 'top',
+            fill: INK,
+            fontSize: 11,
+          }}
         />
         <Line
           type="monotone"
           dataKey="pump_efficiency"
-          name="Pump efficiency"
+          name="Pump efficiency  eta(Q N_rated / N)"
           stroke={SERIES.tertiary}
           strokeWidth={2}
           dot={false}
           isAnimationActive={false}
         />
+        <OperatingFlowLine flowLpm={operatingFlowLpm} />
         <ReferenceDot
           x={Number(operatingFlowLpm.toFixed(2))}
           y={Number(operatingEfficiencyPct.toFixed(2))}
@@ -398,13 +469,220 @@ export function EfficiencyCurveChart({
           strokeWidth={2}
           label={{
             value: `${operatingEfficiencyPct.toFixed(1)} %`,
-            position: 'top',
+            position: 'right',
+            offset: 10,
             fill: '#0b0b0b',
             fontSize: 11,
             fontWeight: 600,
           }}
         />
-        <Legend wrapperStyle={legendStyle} />
+        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
+      </LineChart>
+    </ChartFrame>
+  )
+}
+
+// --------------------------------------------------------------------------
+// Shaft power vs flow
+// --------------------------------------------------------------------------
+
+/**
+ * P-Q on the same flow axis as H-Q and eta-Q.
+ *
+ * Both the useful power and the shaft power are drawn, because the gap between
+ * them IS the efficiency curve expressed in watts, and at low flow that gap is
+ * the whole story: hydraulic power collapses toward zero while shaft power
+ * does not.
+ */
+export function PowerCurveChart({
+  data,
+  operatingFlowLpm,
+  operatingShaftPowerW,
+  height = 220,
+}: {
+  data: { flow_lpm: number; hydraulic_power_w: number; shaft_power_w: number }[]
+  operatingFlowLpm: number
+  operatingShaftPowerW: number
+  height?: number
+}) {
+  return (
+    <ChartFrame height={height}>
+      <LineChart data={data} margin={STACKED_MARGIN}>
+        <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+        <XAxis
+          {...axisProps}
+          dataKey="flow_lpm"
+          type="number"
+          domain={[0, 'dataMax']}
+          tickFormatter={(v: number) => v.toFixed(0)}
+          label={X_AXIS_LABEL}
+        />
+        <YAxis
+          {...axisProps}
+          width={56}
+          domain={[0, 'auto']}
+          label={{
+            value: 'Power (W)',
+            angle: -90,
+            position: 'insideLeft',
+            fill: INK,
+            fontSize: 11,
+            style: { textAnchor: 'middle' },
+          }}
+        />
+        <Tooltip content={<ChartTooltip labelUnit="L/min" valueUnit="W" digits={1} />} />
+        <Line
+          type="monotone"
+          dataKey="shaft_power_w"
+          name="Shaft power  P_hyd / eta + drag"
+          stroke={SERIES.secondary}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="hydraulic_power_w"
+          name="Hydraulic power  rho g Q H"
+          stroke={SERIES.primary}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <OperatingFlowLine flowLpm={operatingFlowLpm} />
+        <ReferenceDot
+          x={Number(operatingFlowLpm.toFixed(2))}
+          y={Number(operatingShaftPowerW.toFixed(2))}
+          r={6}
+          fill="#0b0b0b"
+          stroke="#ffffff"
+          strokeWidth={2}
+          label={{
+            value: `${operatingShaftPowerW.toFixed(1)} W`,
+            position: 'top',
+            offset: 10,
+            fill: '#0b0b0b',
+            fontSize: 11,
+            fontWeight: 600,
+          }}
+        />
+        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
+      </LineChart>
+    </ChartFrame>
+  )
+}
+
+// --------------------------------------------------------------------------
+// NPSH available vs required -- the cavitation boundary
+// --------------------------------------------------------------------------
+
+/**
+ * The one panel on this page that reaches the vibration layer.
+ *
+ * NPSHa falls with flow (suction friction rises as Q^2); NPSHr rises with flow.
+ * Where they cross, vapour forms at the impeller eye and collapses in the
+ * volute -- and that collapse is broadband mechanical excitation, which is why
+ * the cavitation fault shows up as high-frequency energy on the accelerometer
+ * rather than as a hydraulic reading alone. Everything to the right of the
+ * crossing is shaded, because that is the region where a hydraulic condition
+ * becomes a vibration signature.
+ */
+export function NpshCurveChart({
+  data,
+  operatingFlowLpm,
+  onsetFlowLpm,
+  maxFlowLpm,
+  height = 240,
+}: {
+  data: { flow_lpm: number; npsh_available_m: number; npsh_required_m: number }[]
+  operatingFlowLpm: number
+  /** Flow at which NPSHa = NPSHr, or null when they never meet. */
+  onsetFlowLpm: number | null
+  maxFlowLpm: number
+  height?: number
+}) {
+  const onsetInRange = onsetFlowLpm !== null && onsetFlowLpm <= maxFlowLpm
+  const onsetNpsh =
+    onsetInRange && onsetFlowLpm !== null
+      ? (data.reduce((closest, row) =>
+          Math.abs(row.flow_lpm - onsetFlowLpm) < Math.abs(closest.flow_lpm - onsetFlowLpm)
+            ? row
+            : closest,
+        ).npsh_required_m)
+      : 0
+  return (
+    <ChartFrame height={height}>
+      <LineChart data={data} margin={STACKED_MARGIN}>
+        <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+        <XAxis
+          {...axisProps}
+          dataKey="flow_lpm"
+          type="number"
+          domain={[0, 'dataMax']}
+          tickFormatter={(v: number) => v.toFixed(0)}
+          label={X_AXIS_LABEL}
+        />
+        <YAxis
+          {...axisProps}
+          width={56}
+          domain={[0, 'auto']}
+          label={{
+            value: 'NPSH (m)',
+            angle: -90,
+            position: 'insideLeft',
+            fill: INK,
+            fontSize: 11,
+            style: { textAnchor: 'middle' },
+          }}
+        />
+        <Tooltip content={<ChartTooltip labelUnit="L/min" valueUnit="m" />} />
+        {onsetInRange && onsetFlowLpm !== null && (
+          <ReferenceArea
+            x1={Number(onsetFlowLpm.toFixed(2))}
+            x2={maxFlowLpm}
+            fill="#d03b3b"
+            fillOpacity={0.09}
+            label={{ value: 'Cavitation risk', fill: '#a12f2f', fontSize: 11, fontWeight: 600 }}
+          />
+        )}
+        <Line
+          type="monotone"
+          dataKey="npsh_available_m"
+          name="NPSH available"
+          stroke={SERIES.primary}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="npsh_required_m"
+          name="NPSH required"
+          stroke={SERIES.secondary}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <OperatingFlowLine flowLpm={operatingFlowLpm} />
+        {onsetInRange && onsetFlowLpm !== null && (
+          <ReferenceDot
+            x={Number(onsetFlowLpm.toFixed(2))}
+            y={Number(onsetNpsh.toFixed(2))}
+            r={6}
+            fill="#a12f2f"
+            stroke="#ffffff"
+            strokeWidth={2}
+            label={{
+              value: `Cavitation onset  ${onsetFlowLpm.toFixed(1)} L/min`,
+              position: 'top',
+              offset: 10,
+              fill: '#a12f2f',
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          />
+        )}
+        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
       </LineChart>
     </ChartFrame>
   )

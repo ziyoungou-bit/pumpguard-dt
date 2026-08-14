@@ -35,9 +35,11 @@ export const PUMP = {
   duty_flow_lpm: 20.0,
   duty_head_m: 8.0,
   bep_flow_lpm: 22.0,
-  bep_efficiency: 0.62,
-  efficiency_span_lpm: 26.0,
-  minimum_efficiency: 0.05,
+  /**
+   * Peak efficiency at the BEP. Set from the specific speed, not from a
+   * catalogue guess -- see SPECIFIC_SPEED_NQ below.
+   */
+  bep_efficiency: 0.42,
   impeller_diameter_m: 0.105,
   suction_diameter_m: 0.025,
   discharge_diameter_m: 0.02,
@@ -101,8 +103,47 @@ export const ASSET_TAGS = {
 export const HEAD_COEFFICIENT =
   (PUMP.shutoff_head_m - PUMP.duty_head_m) / Math.pow(PUMP.duty_flow_lpm / LPM_PER_M3S, 2)
 
+/**
+ * Specific speed n_q = N * sqrt(Q) / H^0.75, evaluated at the rated duty point
+ * with N in rpm, Q in m^3/s and H in m. Computed, never typed in, so it always
+ * agrees with the three numbers above.
+ *
+ *     n_q = 1450 * sqrt(3.333e-4) / 8^0.75 = 5.6
+ *
+ * This is the number that fixes PUMP.bep_efficiency. Conventional centrifugal
+ * impellers sit at n_q 10-80; below about 10 the impeller passage is so narrow
+ * that disc friction on the shroud faces and volumetric leakage past the wear
+ * ring dominate the loss budget, and measured peak efficiency for this size and
+ * shape falls in the 35-45 % band (Gulich, Centrifugal Pumps, ch. 3.6-3.7,
+ * efficiency-vs-n_q correlation). 42 % is the middle of that band.
+ *
+ * The previous 62 % was a value borrowed from a mid-n_q machine. It understated
+ * shaft power by a third, which propagated straight through to motor loading
+ * and the thermal model.
+ */
+export const SPECIFIC_SPEED_NQ =
+  (PUMP.rated_speed_rpm * Math.sqrt(PUMP.duty_flow_lpm / LPM_PER_M3S)) /
+  Math.pow(PUMP.duty_head_m, 0.75)
+
 export const lpmToM3s = (lpm: number) => lpm / LPM_PER_M3S
 export const m3sToLpm = (m3s: number) => m3s * LPM_PER_M3S
+
+/** Flow at which the pump curve reaches zero head, L/min. The right-hand edge. */
+export function runoutFlowLpm(speedRpm: number): number {
+  if (speedRpm <= 0) return 0
+  const shutoff = PUMP.shutoff_head_m * Math.pow(speedRpm / PUMP.rated_speed_rpm, 2)
+  return m3sToLpm(Math.sqrt(shutoff / HEAD_COEFFICIENT))
+}
+
+/** BEP flow at a speed. Affinity law Q ~ N moves the peak; it is not fixed. */
+export function bepFlowLpm(speedRpm: number): number {
+  return (PUMP.bep_flow_lpm * speedRpm) / PUMP.rated_speed_rpm
+}
+
+/** Induction-motor slip, 0..1, from the synchronous speed. */
+export function motorSlip(speedRpm: number): number {
+  return (MOTOR.synchronous_speed_rpm - speedRpm) / MOTOR.synchronous_speed_rpm
+}
 
 /** Head developed at a given flow and speed, in metres. Clamped at zero. */
 export function pumpHead(flowM3s: number, speedRpm: number): number {
@@ -144,12 +185,34 @@ export function operatingFlowLpm(speedRpm: number, valveOpening: number): number
   return m3sToLpm(Math.sqrt((shutoff - CIRCUIT.static_head_m) / denominator))
 }
 
-/** Inverted-parabola efficiency about the BEP, 0..1. */
-export function pumpEfficiency(flowLpm: number): number {
-  if (flowLpm <= 0) return 0
-  const offset = (flowLpm - PUMP.bep_flow_lpm) / PUMP.efficiency_span_lpm
-  const eff = PUMP.bep_efficiency * (1 - offset * offset)
-  return Math.max(PUMP.minimum_efficiency, Math.min(PUMP.bep_efficiency, eff))
+/**
+ * Efficiency, 0..1, looked up on the REDUCED flow.
+ *
+ *     Q_reduced = Q * N_rated / N        eta = eta_BEP [ 2x - x^2 ],  x = Q_red / Q_BEP
+ *
+ * Why reduced flow and not absolute flow. The affinity laws say that a change of
+ * speed maps every point on the characteristic onto a homologous point:
+ * Q ~ N, H ~ N^2, P ~ N^3, and eta is invariant along that mapping. So the
+ * efficiency of the machine is a function of WHERE ON ITS OWN CURVE it is
+ * sitting, not of how many litres per minute are coming out. Dividing the
+ * absolute flow back to rated speed is exactly the "where on its own curve"
+ * coordinate. Looking eta up on absolute flow instead nails the BEP to a fixed
+ * 22 L/min, so at half speed the pump is reported as running far off BEP when
+ * it is in fact sitting precisely on it.
+ *
+ * The parabola is the standard one: it vanishes at Q = 0 and at Q = 2 Q_BEP,
+ * and peaks at eta_BEP. It has no free width parameter and no floor. A floor
+ * would be the more damaging of the two: hydraulic power rho g Q H goes to zero
+ * with Q while disc friction and mechanical loss do not, so efficiency near
+ * shutoff really is a single-digit number, and a 5 % floor made the dangerous
+ * low-flow region (recirculation, temperature rise, radial load) look mild.
+ */
+export function pumpEfficiency(flowLpm: number, speedRpm: number): number {
+  if (flowLpm <= 0 || speedRpm <= 0) return 0
+  const reducedFlowLpm = (flowLpm * PUMP.rated_speed_rpm) / speedRpm
+  const x = reducedFlowLpm / PUMP.bep_flow_lpm
+  if (x >= 2) return 0
+  return Math.max(0, PUMP.bep_efficiency * (2 * x - x * x))
 }
 
 /** P_hyd = rho * g * Q * H, watts. */
@@ -184,20 +247,71 @@ export const rotationalFrequencyHz = (rpm: number) => rpm / 60
 export const bladePassFrequencyHz = (rpm: number) => PUMP.impeller_vanes * rotationalFrequencyHz(rpm)
 
 /**
- * NPSH available at the suction flange, metres.
- * NPSHa = (P_atm - P_vap)/(rho g) - static lift - suction friction head
+ * Suction-line resistance, m/(m^3/s)^2. `restriction` (0..1) is a partly
+ * clogged strainer or foot valve: it acts on the suction side only, which is
+ * the physical route to cavitation. Mirrors suction_pressure_pa() in the
+ * backend, including the 60x multiplier.
  */
-export function npshAvailableM(flowM3s: number): number {
-  const barometric =
-    (FLUID.atmospheric_pressure - FLUID.vapour_pressure) / (FLUID.density * FLUID.gravity)
-  const frictionHead = CIRCUIT.suction_resistance * flowM3s * flowM3s
-  return barometric - CIRCUIT.suction_lift_m - frictionHead
+export function suctionResistance(restriction = 0): number {
+  const severity = Math.min(1, Math.max(0, restriction))
+  return CIRCUIT.suction_resistance * (1 + 60 * severity * severity)
 }
 
-/** NPSH required, rising with flow. Low-order fit typical of a small pump. */
-export function npshRequiredM(flowLpm: number): number {
-  const ratio = flowLpm / PUMP.duty_flow_lpm
-  return 0.6 + 1.4 * ratio * ratio
+/**
+ * NPSH available at the suction flange, metres.
+ *
+ *     NPSHa = (P_atm - P_vap)/(rho g) + z_s - h_f,suction
+ *
+ * z_s is the NET static head at the flange: the pump sits suction_lift above
+ * the reservoir floor but the liquid stands reservoir_level deep, so the lift
+ * actually seen is (1.2 - 0.8) = 0.4 m and z_s = -0.4 m. This port previously
+ * subtracted the full 1.2 m, disagreeing with the backend it mirrors by 0.8 m.
+ */
+export function npshAvailableM(flowM3s: number, suctionRestriction = 0): number {
+  const barometric =
+    (FLUID.atmospheric_pressure - FLUID.vapour_pressure) / (FLUID.density * FLUID.gravity)
+  const netLift = CIRCUIT.suction_lift_m - CIRCUIT.reservoir_level_m
+  const frictionHead = suctionResistance(suctionRestriction) * flowM3s * flowM3s
+  return barometric - netLift - frictionHead
+}
+
+/**
+ * NPSH required, metres. Low-order fit typical of a small pump, anchored at
+ * 2.0 m at the rated duty flow.
+ *
+ * Speed enters the same way it does for efficiency: NPSHr is a homologous
+ * quantity, NPSHr(Q, N) = (N/N_rated)^2 * NPSHr_rated(Q * N_rated / N). The
+ * shutoff term therefore scales with N^2 while the quadratic term, once the
+ * reduced flow is substituted back, is speed-invariant in absolute flow.
+ */
+export function npshRequiredM(flowLpm: number, speedRpm: number): number {
+  if (speedRpm <= 0) return 0
+  const speedRatio = speedRpm / PUMP.rated_speed_rpm
+  const reducedRatio = (flowLpm * PUMP.rated_speed_rpm) / speedRpm / PUMP.duty_flow_lpm
+  return speedRatio * speedRatio * (0.6 + 1.4 * reducedRatio * reducedRatio)
+}
+
+/**
+ * Flow at which NPSHa falls to NPSHr -- the cavitation boundary. Closed form,
+ * because both curves are quadratic in Q with no linear term:
+ *
+ *     B - z_net - R_s Q^2 = 0.6 r^2 + 1.4 Q^2 / Q_duty^2
+ *     Q = sqrt( (B - z_net - 0.6 r^2) / (R_s + 1.4 / Q_duty^2) )
+ *
+ * Returns L/min, or null when the suction head is so poor that the pump is
+ * already below NPSHr at zero flow.
+ */
+export function cavitationOnsetFlowLpm(speedRpm: number, suctionRestriction = 0): number | null {
+  if (speedRpm <= 0) return null
+  const barometric =
+    (FLUID.atmospheric_pressure - FLUID.vapour_pressure) / (FLUID.density * FLUID.gravity)
+  const netLift = CIRCUIT.suction_lift_m - CIRCUIT.reservoir_level_m
+  const speedRatio = speedRpm / PUMP.rated_speed_rpm
+  const numerator = barometric - netLift - 0.6 * speedRatio * speedRatio
+  if (numerator <= 0) return null
+  const dutyM3s = lpmToM3s(PUMP.duty_flow_lpm)
+  const denominator = suctionResistance(suctionRestriction) + 1.4 / (dutyM3s * dutyM3s)
+  return m3sToLpm(Math.sqrt(numerator / denominator))
 }
 
 export interface OperatingPoint {
@@ -209,14 +323,21 @@ export interface OperatingPoint {
   electrical_power_w: number
   motor_current_a: number
   npsh_margin_m: number
+  /** True when H0(N) never reaches the static head, so the curves do not cross. */
+  no_intersection: boolean
 }
 
 /** Full hydraulic solution at a speed and valve opening. */
-export function solveOperatingPoint(speedRpm: number, valveOpening: number): OperatingPoint {
+export function solveOperatingPoint(
+  speedRpm: number,
+  valveOpening: number,
+  suctionRestriction = 0,
+): OperatingPoint {
+  const shutoff = PUMP.shutoff_head_m * Math.pow(Math.max(0, speedRpm) / PUMP.rated_speed_rpm, 2)
   const flowLpm = operatingFlowLpm(speedRpm, valveOpening)
   const flowM3s = lpmToM3s(flowLpm)
   const headM = pumpHead(flowM3s, speedRpm)
-  const efficiency = pumpEfficiency(flowLpm)
+  const efficiency = pumpEfficiency(flowLpm, speedRpm)
   const hydraulic = hydraulicPowerW(flowM3s, headM)
   const shaft = shaftPowerW(hydraulic, efficiency, speedRpm)
   const electrical = electricalPowerW(shaft)
@@ -228,27 +349,54 @@ export function solveOperatingPoint(speedRpm: number, valveOpening: number): Ope
     shaft_power_w: shaft,
     electrical_power_w: electrical,
     motor_current_a: motorCurrentA(electrical),
-    npsh_margin_m: npshAvailableM(flowM3s) - npshRequiredM(flowLpm),
+    npsh_margin_m:
+      npshAvailableM(flowM3s, suctionRestriction) - npshRequiredM(flowLpm, speedRpm),
+    no_intersection: speedRpm > 0 && shutoff <= CIRCUIT.static_head_m,
   }
 }
 
-/** Sampled pump + system curves for plotting. */
-export function curveSeries(speedRpm: number, valveOpening: number, points = 48) {
-  const maxFlowLpm = 34
-  const series: {
-    flow_lpm: number
-    pump_head_m: number
-    system_head_m: number
-    pump_efficiency: number
-  }[] = []
+/**
+ * Flow axis shared by every panel on the Pump Performance page. Fixed at the
+ * runout flow of the RATED curve rather than of the current one, so that
+ * dropping the speed visibly shrinks the characteristic instead of silently
+ * rescaling the axis under it.
+ */
+export const CURVE_MAX_FLOW_LPM = Math.ceil(runoutFlowLpm(PUMP.rated_speed_rpm))
+
+export interface CurveSample {
+  flow_lpm: number
+  pump_head_m: number
+  system_head_m: number
+  pump_efficiency: number
+  hydraulic_power_w: number
+  shaft_power_w: number
+  npsh_available_m: number
+  npsh_required_m: number
+}
+
+/** Sampled pump, system, efficiency, power and NPSH curves for plotting. */
+export function curveSeries(
+  speedRpm: number,
+  valveOpening: number,
+  suctionRestriction = 0,
+  points = 96,
+): CurveSample[] {
+  const series: CurveSample[] = []
   for (let i = 0; i <= points; i += 1) {
-    const flowLpm = (maxFlowLpm * i) / points
+    const flowLpm = (CURVE_MAX_FLOW_LPM * i) / points
     const flowM3s = lpmToM3s(flowLpm)
+    const headM = pumpHead(flowM3s, speedRpm)
+    const efficiency = pumpEfficiency(flowLpm, speedRpm)
+    const hydraulic = hydraulicPowerW(flowM3s, headM)
     series.push({
       flow_lpm: Number(flowLpm.toFixed(2)),
-      pump_head_m: Number(pumpHead(flowM3s, speedRpm).toFixed(3)),
+      pump_head_m: Number(headM.toFixed(3)),
       system_head_m: Number(systemHead(flowM3s, valveOpening).toFixed(3)),
-      pump_efficiency: Number((pumpEfficiency(flowLpm) * 100).toFixed(2)),
+      pump_efficiency: Number((efficiency * 100).toFixed(2)),
+      hydraulic_power_w: Number(hydraulic.toFixed(2)),
+      shaft_power_w: Number(shaftPowerW(hydraulic, efficiency, speedRpm).toFixed(2)),
+      npsh_available_m: Number(npshAvailableM(flowM3s, suctionRestriction).toFixed(3)),
+      npsh_required_m: Number(npshRequiredM(flowLpm, speedRpm).toFixed(3)),
     })
   }
   return series

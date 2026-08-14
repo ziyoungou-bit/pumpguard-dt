@@ -18,6 +18,7 @@ import {
   ASSET_TAGS,
   FLUID,
   MOTOR,
+  PUMP,
   THERMAL,
   lpmToM3s,
   rotationalFrequencyHz,
@@ -84,7 +85,7 @@ export function computeFrame(i: FrameInputs): Telemetry {
   const dryLoss = dryRun ? 0.95 * severity : 0
   const headM = op.pump_head_m * (1 - cavitationLoss) * (1 - dryLoss)
   const flowLpm = op.flow_lpm * (1 - cavitationLoss * 0.6) * (1 - dryLoss)
-  const efficiency = Math.max(0.02, op.pump_efficiency * (1 - cavitationLoss) * (1 - dryLoss))
+  const efficiency = Math.max(0, op.pump_efficiency * (1 - cavitationLoss) * (1 - dryLoss))
   const flowM3s = lpmToM3s(flowLpm)
 
   const noiseScale = 1 + 6 * i.noise
@@ -162,7 +163,10 @@ export function computeFrame(i: FrameInputs): Telemetry {
   // Engineering page. It is deliberately not a learned score: an unexplainable
   // health number is not something a maintenance engineer can act on.
   const vibrationPenalty = Math.max(0, (rms - 1.8) * 12)
-  const efficiencyPenalty = Math.max(0, (0.55 - efficiency) * 60)
+  // Expressed as a fraction of the BEP efficiency, not as an absolute
+  // efficiency. An absolute threshold silently becomes an always-on penalty the
+  // moment the peak efficiency of the machine is corrected.
+  const efficiencyPenalty = Math.max(0, (0.89 - efficiency / PUMP.bep_efficiency) * 37)
   const npshPenalty = npshMargin < 0.5 ? (0.5 - npshMargin) * 14 : 0
   const thermalPenalty = Math.max(0, (bearingTempC - 62) * 1.4)
   const health = running
