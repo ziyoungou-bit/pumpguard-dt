@@ -174,6 +174,16 @@ class SimulationDataProvider(DataProvider):
     def step(self, dt: float) -> Telemetry:
         return self.session.step(dt)
 
+    def warm_start(self, seconds: float) -> Telemetry | None:
+        """Hand the visitor a machine already running at a settled duty point.
+
+        Only this provider has it. A recording has its own timeline and warming
+        it would consume the first seconds of somebody's dataset; the
+        live-device providers do not own the machine and must never command it.
+        `SessionManager` therefore asks for the method rather than assuming it.
+        """
+        return self.session.warm_start(seconds)
+
     @property
     def latest(self) -> Telemetry | None:
         return self.session.last_telemetry

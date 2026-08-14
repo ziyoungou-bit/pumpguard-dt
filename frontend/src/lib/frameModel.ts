@@ -120,7 +120,12 @@ export function computeFrame(i: FrameInputs): Telemetry {
   const dischargeKpa = suctionKpa + headM * FLUID.density * FLUID.gravity * 1e-3 + jitter(0.6)
 
   // First-order thermal rise toward a load-dependent steady state.
-  const loadFraction = Math.min(1.4, op.electrical_power_w / MOTOR.rated_power_w)
+  // SHAFT power over the rating, not electrical. A motor's rated power is its
+  // shaft output, so dividing electrical input by it double-counts the motor's
+  // own losses and overstates the load by 1/eta_motor. This port used
+  // electrical while the backend used shaft, which ran the offline demo about
+  // 10 C hotter than the live system for the same machine.
+  const loadFraction = Math.min(1.4, op.shaft_power_w / MOTOR.rated_power_w)
   const motorTarget = THERMAL.ambient_c + THERMAL.motor_rise_at_rated_c * loadFraction
   const bearingTarget =
     THERMAL.ambient_c +

@@ -49,6 +49,31 @@ class ThermalModel:
         self.motor_c = self._p.ambient_c
         self.bearing_c = self._p.ambient_c
 
+    def settle(self, load_fraction: float) -> None:
+        """Jump both states to the steady value for a running machine at `load`.
+
+        The analytic limit of `update` as t -> infinity with the same targets:
+        no new coefficient, no shortcut round the model, just its own fixed
+        point evaluated directly instead of being integrated toward.
+
+        This exists because the motor time constant is 420 s. Warming a new
+        visitor's session by simulating forward would need twenty minutes of
+        simulated time -- thousands of ticks per visitor, inside the request --
+        and stopping short leaves a machine at duty flow and duty current
+        sitting at ambient temperature. That combination does not occur in the
+        training data, and the classifier duly reported a perfectly healthy
+        machine as a sensor fault: the readings genuinely were mutually
+        inconsistent.
+
+        Dry running is deliberately not a parameter. A machine is handed to a
+        visitor healthy; if they then inject a dry run, the transient toward the
+        hotter target is the thing worth watching and must not be skipped.
+        """
+        p = self._p
+        load = max(0.0, load_fraction)
+        self.motor_c = p.ambient_c + p.motor_rise_at_rated_c * load
+        self.bearing_c = p.ambient_c + p.bearing_rise_at_rated_c * load
+
     def update(self, dt: float, load_fraction: float, prime_loss: float, running: bool) -> None:
         """Advance both states one tick.
 

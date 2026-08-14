@@ -212,14 +212,12 @@ class SessionManager:
         slow step in creation, and holding the dictionary lock across it would
         make every new visitor wait for the one before them.
         """
-        if self.data_source is not DataSource.SIMULATION:
+        warm = getattr(session.provider, "warm_start", None)
+        if self.data_source is not DataSource.SIMULATION or warm is None:
             return
-        outcome = session.provider.command("start")
-        if not outcome.accepted:
-            # Not fatal: the visitor still gets a session, just a stopped one,
-            # and the SCADA page will say why START was refused.
-            return
-        session.advance(WARM_START_S)
+        # A refusal is not fatal: the visitor still gets a session, just a
+        # stopped one, and the SCADA page will say why START was refused.
+        warm(WARM_START_S)
 
     def get(self, session_id: str | None) -> Session | None:
         if not session_id:

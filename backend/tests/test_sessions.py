@@ -10,10 +10,15 @@ WORSE than its offline fallback.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from app.api.sessions import WARM_START_S, SessionManager
-from app.contracts import AssetState, DataSource
+from app.config.pump_parameters import MOTOR, THERMAL
+from app.contracts import AssetState, DataSource, FaultType
+from app.ml.diagnosis import diagnose
+from app.ml.inference import CLASSIFIER_FILENAME, DEFAULT_MODEL_DIR, InferenceService
 
 
 def manager(data_source: DataSource = DataSource.SIMULATION) -> SessionManager:
@@ -46,6 +51,53 @@ def test_the_first_frame_is_settled_rather_than_mid_ramp():
     assert after.rpm == pytest.approx(before.rpm, rel=0.02)
     assert after.flow_lpm == pytest.approx(before.flow_lpm, rel=0.05)
     assert WARM_START_S >= 20.0
+
+
+def test_the_first_frame_is_thermally_settled():
+    """Duty flow and duty current at ambient temperature is not a real state.
+
+    The motor time constant is 420 s, so a warm start that only simulates
+    forward leaves the machine cold while every hydraulic and electrical
+    reading says it has been running. That combination does not occur in the
+    training data and the classifier read it, correctly, as mutually
+    inconsistent instrumentation -- it reported a healthy machine as a sensor
+    fault with 0.66 confidence. The temperatures are set to the thermal model's
+    own fixed point instead of being integrated toward it.
+    """
+    frame = manager().create().latest
+    assert frame is not None
+
+    rise = frame.motor_temperature_c - THERMAL.ambient_c
+    assert rise > 15, "the motor is still at ambient after a warm start"
+
+    # The fixed point for this load, from the same model: ambient + rise * load,
+    # with load being SHAFT power over the motor rating.
+    load = frame.shaft_power_w / MOTOR.rated_power_w
+    assert frame.motor_temperature_c == pytest.approx(
+        THERMAL.ambient_c + THERMAL.motor_rise_at_rated_c * load, abs=1.5
+    )
+    assert frame.bearing_temperature_c == pytest.approx(
+        THERMAL.ambient_c + THERMAL.bearing_rise_at_rated_c * load, abs=1.5
+    )
+    # Still well inside limits: settled, not hot.
+    assert frame.motor_temperature_c < 65
+
+
+@pytest.mark.skipif(
+    not (Path(DEFAULT_MODEL_DIR) / CLASSIFIER_FILENAME).exists(),
+    reason="no trained artefacts; run `python -m app.ml.train --output models` first",
+)
+def test_the_first_frame_is_diagnosed_healthy():
+    """The regression this whole warm start exists to prevent.
+
+    A visitor opening the site cold must not be told the machine has a sensor
+    fault. This is an end-to-end assertion over the real classifier, which is
+    the only level at which the defect was visible.
+    """
+    frame = manager().create().latest
+    assert frame is not None
+    diagnosis = diagnose(frame, InferenceService(DEFAULT_MODEL_DIR))
+    assert diagnosis.detected_condition == FaultType.NORMAL.value
 
 
 def test_the_first_frame_carries_no_alarms():

@@ -467,6 +467,42 @@ class SimulationSession:
 
     # -- commands ---------------------------------------------------------
 
+    def warm_start(self, seconds: float, dt: float = 0.1) -> Telemetry | None:
+        """Start the machine and hand back a settled duty point.
+
+        Two things have to be true of the first frame a visitor sees, and they
+        need different treatment because they settle on different timescales.
+
+        The hydraulics and the state machine settle in seconds, so they are
+        simulated: `seconds` is long enough to clear the speed ramp and the
+        start-up alarm inhibit, during which flow and current are legitimately
+        outside their limits.
+
+        The temperatures settle on a 420 s time constant, so they are not
+        simulated -- they are set to the fixed point of the same thermal model.
+        Integrating there would cost thousands of ticks per visitor inside the
+        request; stopping short leaves a machine at duty flow and duty current
+        sitting at ambient, and that combination is not in the training data.
+        The classifier called exactly that frame a sensor fault, with 0.66
+        confidence, which was the correct reading of a genuinely inconsistent
+        set of numbers.
+
+        Returns the settled frame, or None if START was refused.
+        """
+        if not self.command("start").get("ok"):
+            return None
+        steps = max(int(round(seconds / dt)), 1)
+        frame = None
+        for _ in range(steps):
+            frame = self.step(dt)
+        # Settle the thermal state at the load the machine has just reached,
+        # then take one more tick so the reported temperatures come from the
+        # sensor bus like every other reading rather than straight off the model.
+        if frame is not None:
+            self._thermal.settle(frame.shaft_power_w / MOTOR.rated_power_w)
+            frame = self.step(dt)
+        return frame
+
     def command(self, name: str, **kwargs) -> dict:
         """Operator command. Never raises for an illegal request; returns why."""
         action = str(name).strip().lower()
