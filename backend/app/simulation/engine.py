@@ -70,7 +70,7 @@ from .thermal import ThermalModel
 
 #: Baseline component amplitudes at rated speed on a healthy machine, mm/s.
 #: Chosen so the healthy overall RMS lands near 0.75 mm/s, comfortably inside
-#: ISO 10816-1 Class I "good" (below 1.8 mm/s) and far from the 4.5 mm/s alarm.
+#: ISO 20816-1 Class I "good" (below 1.8 mm/s) and far from the 4.5 mm/s alarm.
 _BASE_1X_MM_S = 0.55
 _BASE_2X_MM_S = 0.22
 _BASE_BLADE_PASS_MM_S = 0.15

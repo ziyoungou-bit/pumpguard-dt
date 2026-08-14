@@ -861,11 +861,11 @@ class MLGateway:
 #
 # Reference duty point, from config/alarm_thresholds.py: 21.0 L/min, 7.59 m,
 # 0.563 A, NPSH margin 6.95 m, vibration ~0.75 mm/s RMS. Every threshold below
-# is quoted against those and against the ISO 10816-1 Class I bands, so the
+# is quoted against those and against the ISO 20816-1 Class I bands, so the
 # rules can be checked against the commissioning data rather than taken on
 # trust.
 
-#: ISO 10816-1 Class I band edges, mm/s RMS.
+#: ISO 20816-1 Class I band edges, mm/s RMS.
 _ISO_SATISFACTORY = 1.8
 _ISO_UNSATISFACTORY = 4.5
 _ISO_UNACCEPTABLE = 7.1
@@ -1002,7 +1002,7 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
                 ),
                 measured_value=round(telemetry.vibration_rms_mm_s, 3),
                 unit="mm/s",
-                reference=f"ISO 10816-1 Class I good below {_ISO_SATISFACTORY} mm/s",
+                reference=f"ISO 20816-1 Class I good below {_ISO_SATISFACTORY} mm/s",
             )
         )
 
@@ -1010,7 +1010,7 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
     evidence.append(
         DiagnosisEvidence(
             source="physics",
-            statement="overall vibration against ISO 10816-1 Class I",
+            statement="overall vibration against ISO 20816-1 Class I",
             measured_value=round(telemetry.vibration_rms_mm_s, 3),
             unit="mm/s",
             reference=f"{_ISO_SATISFACTORY} good / {_ISO_UNSATISFACTORY} satisfactory / {_ISO_UNACCEPTABLE} unsatisfactory",

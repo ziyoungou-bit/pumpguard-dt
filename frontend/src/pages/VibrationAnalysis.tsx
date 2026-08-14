@@ -14,6 +14,8 @@ import type { FftResponse, VibrationResponse } from '../types/contracts'
 import { BEARING, MOTOR, bladePassFrequencyHz } from '../lib/pumpPhysics'
 import { VIBRATION_GEOMETRY } from '../lib/frameModel'
 import {
+  VIBRATION_BAND_LABEL,
+  VIBRATION_SCOPE_NOTE,
   bearingDefectFrequencies,
   synthesiseVibration,
   vibrationComponents,
@@ -271,7 +273,7 @@ export function VibrationAnalysis() {
           unit="mm/s"
           tag="ACC-101"
           status={limitStatus(telemetry.vibration_rms_mm_s, 1.8, 4.5)}
-          hint={`10-1000 Hz. Zone ${zone.zone}: ${zone.label}`}
+          hint={`${VIBRATION_BAND_LABEL}. Zone ${zone.zone}: ${zone.label}`}
         />
         <StatTile
           label="Peak"
@@ -317,6 +319,8 @@ export function VibrationAnalysis() {
         <StatTile label="Vibration Y" value={fmt(telemetry.vibration_y_mm_s, 2)} unit="mm/s" tag="vertical" />
         <StatTile label="Vibration Z" value={fmt(telemetry.vibration_z_mm_s, 2)} unit="mm/s" tag="axial" />
       </div>
+
+      <ProvenanceNote>{VIBRATION_SCOPE_NOTE}</ProvenanceNote>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <ErrorBoundary panelName="Time waveform" compact>

@@ -9,6 +9,8 @@
  */
 
 import { useAppState } from '../state/AppState'
+import { AssetState } from '../types/contracts'
+import { healthBreakdown } from '../lib/health'
 import {
   BEARING,
   CIRCUIT,
@@ -24,7 +26,7 @@ import {
   systemResistance,
 } from '../lib/pumpPhysics'
 import { bearingDefectFrequencies } from '../lib/vibration'
-import { fmt, fmtUnit } from '../lib/format'
+import { fmt, fmtUnit, humanise } from '../lib/format'
 import { Card, DefinitionRow, Formula, PageHeading, ProvenanceNote } from '../components/ui'
 
 export function Engineering() {
@@ -38,6 +40,23 @@ export function Engineering() {
   const reducedFlowLpm =
     telemetry.rpm > 0 ? (telemetry.flow_lpm * PUMP.rated_speed_rpm) / telemetry.rpm : 0
   const x = reducedFlowLpm / PUMP.bep_flow_lpm
+  // The reported margin is not simply NPSHa - NPSHr: a cavitation or dry-run
+  // fault subtracts a further allowance in the frame model. Printing only the
+  // two curve terms and then a margin that includes a third, unnamed one is the
+  // same defect as an unprinted guard -- the reader subtracts and gets a
+  // different answer, and concludes the page is wrong rather than incomplete.
+  const npshFaultAdjustmentM =
+    telemetry.npsh_margin_m -
+    (npshAvailableM(flowM3s) - npshRequiredM(telemetry.flow_lpm, telemetry.rpm))
+  // The same breakdown the frame was scored from, not a retyped copy of it.
+  const health = healthBreakdown({
+    running: telemetry.asset_state === AssetState.RUNNING,
+    vibration_rms_mm_s: telemetry.vibration_rms_mm_s,
+    pump_efficiency: telemetry.pump_efficiency,
+    bep_efficiency: PUMP.bep_efficiency,
+    npsh_margin_m: telemetry.npsh_margin_m,
+    bearing_temperature_c: telemetry.bearing_temperature_c,
+  })
   const bearings = bearingDefectFrequencies({
     rolling_elements: BEARING.rolling_elements,
     ball_diameter_mm: BEARING.ball_diameter_mm,
@@ -103,7 +122,15 @@ export function Engineering() {
               note="Efficiency is looked up on the REDUCED flow, not the absolute flow. Affinity laws map every point on the characteristic onto a homologous point at another speed with eta invariant, so what fixes efficiency is where the pump sits on its own curve -- and Q N_rated / N is exactly that coordinate. The parabola vanishes at Q = 0 and at 2 Q_BEP; it has no width parameter and no floor."
             />
             <Formula
-              expression={`NPSHa = (P_atm - P_vap)/(rho g) + z_s - K_s Q^2 = ${fmt(npshAvailableM(flowM3s), 3)} m\nNPSHr = (N/N_rated)^2 [ 0.6 + 1.4 (Q_red / Q_duty)^2 ] = ${fmt(npshRequiredM(telemetry.flow_lpm, telemetry.rpm), 3)} m\nMargin = NPSHa - NPSHr = ${fmt(telemetry.npsh_margin_m, 3)} m`}
+              expression={
+                `NPSHa = (P_atm - P_vap)/(rho g) + z_s - K_s Q^2 = ${fmt(npshAvailableM(flowM3s), 3)} m\n` +
+                `NPSHr = (N/N_rated)^2 [ 0.6 + 1.4 (Q_red / Q_duty)^2 ] = ${fmt(npshRequiredM(telemetry.flow_lpm, telemetry.rpm), 3)} m\n` +
+                `NPSHa - NPSHr = ${fmt(npshAvailableM(flowM3s) - npshRequiredM(telemetry.flow_lpm, telemetry.rpm), 3)} m\n` +
+                (Math.abs(npshFaultAdjustmentM) > 0.001
+                  ? `fault adjustment  ${fmt(npshFaultAdjustmentM, 3)} m (${humanise(telemetry.fault_state)} at severity ${fmt(telemetry.severity, 2)})\n`
+                  : `fault adjustment  0.000 m (no suction-side fault active)\n`) +
+                `Reported margin = ${fmt(telemetry.npsh_margin_m, 3)} m`
+              }
               where={`P_atm = ${FLUID.atmospheric_pressure} Pa, P_vap = ${FLUID.vapour_pressure} Pa at 20 C. z_s = -(suction_lift - reservoir_level) = -(${CIRCUIT.suction_lift_m} - ${CIRCUIT.reservoir_level_m}) = ${fmt(-(CIRCUIT.suction_lift_m - CIRCUIT.reservoir_level_m), 1)} m.`}
               note="z_s is the NET static head at the flange: the pump stands 1.2 m above the reservoir floor but the liquid stands 0.8 m deep, so the lift actually seen is 0.4 m. NPSHr carries the (N/N_rated)^2 factor for the same reason efficiency carries the reduced flow -- it is a homologous quantity. A negative margin means vapour forms at the impeller eye and collapses in the volute. That is cavitation, and it removes metal."
             />
@@ -145,8 +172,29 @@ export function Engineering() {
               where="Velocity RMS converted to peak displacement -- this is why the digital twin has to magnify its shake to show anything at all."
             />
             <Formula
-              expression={`Health = 100 - 12 max(0, RMS - 1.8) - 60 max(0, 0.55 - eta) - 14 max(0, 0.5 - NPSH_margin) - 1.4 max(0, T_brg - 62)\n       = ${fmt(telemetry.health_index, 1)} / 100`}
-              note="A transparent penalty sum, not a learned score. An unexplainable health number is not something a maintenance engineer can act on or challenge."
+              expression={
+                health.scored
+                  ? `Health = 100 - ${health.terms.map((t) => t.label.toLowerCase()).join(' - ')}\n` +
+                    health.terms
+                      .map((t) => `  ${t.label.padEnd(21)} ${t.expression} = ${fmt(t.penalty, 2)}`)
+                      .join('\n') +
+                    `\n  ${'total penalty'.padEnd(21)} ${fmt(
+                      health.terms.reduce((sum, t) => sum + t.penalty, 0),
+                      2,
+                    )}\n       = ${fmt(health.health, 1)} / 100`
+                  : `Health = 100 (not scored)\n  ${health.guard}`
+              }
+              where={
+                health.scored
+                  ? 'Every term is listed, including the ones scoring zero. A term hidden because it happens to be zero is a term the reader cannot check.'
+                  : undefined
+              }
+              note="A transparent penalty sum, not a learned score. These are the same term objects the frame was scored from, rendered rather than retyped -- the page cannot print a formula the model did not use."
+            />
+            <Formula
+              expression={`Guards in force, stated rather than hidden:\n  eta = 0                      when N = 0            (stopped guard)\n  Health = 100, not scored     when state != RUNNING (stopped guard)\n  Q* = 0                       when H0(N) <= H_static (no intersection)\n  crest factor = undefined     when RMS = 0          (shown as a dash)`}
+              where={`This asset is ${telemetry.asset_state}, so ${health.scored ? 'health IS scored' : 'health is NOT scored'} on this frame.`}
+              note="Substituting a stopped machine into the health sum gives 67, not 100, because eta is zero. The page used to print 100 next to a formula that produced 67 -- and the reader who checks is the reader worth convincing. The guard is the answer; hiding it was the defect."
             />
           </div>
         </Card>

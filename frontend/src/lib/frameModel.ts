@@ -24,7 +24,8 @@ import {
   rotationalFrequencyHz,
   solveOperatingPoint,
 } from './pumpPhysics'
-import { componentsRms, vibrationComponents, vibrationHealthPenalty } from './vibration'
+import { componentsRms, vibrationComponents } from './vibration'
+import { healthBreakdown } from './health'
 
 /**
  * Machine geometry the vibration component model needs. Passed in rather than
@@ -202,22 +203,18 @@ export function computeFrame(i: FrameInputs): Telemetry {
     op.npsh_margin_m - (cavitating ? 3.4 * severity : 0) - (dryRun ? 6.0 * severity : 0)
 
   // --- condition -----------------------------------------------------------
-  // Health index is a transparent penalty sum, shown as such on the
-  // Engineering page. It is deliberately not a learned score: an unexplainable
-  // health number is not something a maintenance engineer can act on.
-  const vibrationPenalty = vibrationHealthPenalty(rms)
-  // Expressed as a fraction of the BEP efficiency, not as an absolute
-  // efficiency. An absolute threshold silently becomes an always-on penalty the
-  // moment the peak efficiency of the machine is corrected.
-  const efficiencyPenalty = Math.max(0, (0.89 - efficiency / PUMP.bep_efficiency) * 37)
-  const npshPenalty = npshMargin < 0.5 ? (0.5 - npshMargin) * 14 : 0
-  const thermalPenalty = Math.max(0, (bearingTempC - 62) * 1.4)
-  const health = running
-    ? Math.max(
-        5,
-        Math.min(100, 100 - vibrationPenalty - efficiencyPenalty - npshPenalty - thermalPenalty),
-      )
-    : 100
+  // Health is a transparent penalty sum, computed by ./health so that the
+  // Engineering page can render the SAME terms it was scored from rather than a
+  // hand-typed copy of them. It is deliberately not a learned score: an
+  // unexplainable health number is not something an engineer can act on.
+  const { health } = healthBreakdown({
+    running,
+    vibration_rms_mm_s: rms,
+    pump_efficiency: efficiency,
+    bep_efficiency: PUMP.bep_efficiency,
+    npsh_margin_m: npshMargin,
+    bearing_temperature_c: bearingTempC,
+  })
   const anomaly = Math.min(1, Math.max(0, (100 - health) / 70))
 
   const dominant = hfEnergy > Math.max(a1x, a2x) ? 640 : a2x > a1x ? 2 * fr : fr

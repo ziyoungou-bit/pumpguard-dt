@@ -90,7 +90,7 @@ export function Maintenance() {
             <DefinitionRow label="Anomaly score" value={fmt(diagnosis.anomaly_score, 2)} />
             <DefinitionRow
               label="Vibration zone"
-              value={`ISO 10816-3 zone ${zone.zone}`}
+              value={`ISO 20816-1 Class I zone ${zone.zone}`}
               tone={zone.zone === 'A' || zone.zone === 'B' ? 'ok' : zone.zone === 'C' ? 'warn' : 'alarm'}
             />
           </dl>

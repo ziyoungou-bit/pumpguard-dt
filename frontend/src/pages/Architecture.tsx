@@ -28,6 +28,19 @@ const IMPLEMENTED = {
   label: 'IMPLEMENTED',
   detail: 'Real code in this project',
 }
+/**
+ * For a stage whose LOGIC is implemented but whose PLATFORM is not the one the
+ * stage is named after. The PLC row earned this: the state machine and the
+ * interlocks are real, tested code, but they are Python, and a plain
+ * IMPLEMENTED next to the word "PLC" invites a reader to assume ladder logic on
+ * industrial hardware. That is a small overclaim, and small overclaims are the
+ * expensive kind -- they are the ones that survive to an interview.
+ */
+const IMPLEMENTED_EQUIVALENT = {
+  tone: 'ok' as Tone,
+  label: 'IMPLEMENTED (software equivalent)',
+  detail: 'Real, tested code in this project, on a different platform than the stage name implies',
+}
 
 const STAGES: Stage[] = [
   {
@@ -55,8 +68,8 @@ const STAGES: Stage[] = [
     name: 'PLC',
     role: 'Control state machine and interlocks',
     detail:
-      'OFF / STARTING / RUNNING / STOPPING / FAULT / E_STOP / MAINTENANCE with the transitions and refusals shown on the SCADA page. Protection trips act on the same limits the alarm list displays.',
-    status: IMPLEMENTED,
+      'OFF / STARTING / RUNNING / STOPPING / FAULT / E_STOP / MAINTENANCE with the transitions and refusals shown on the SCADA page. Protection trips act on the same limits the alarm list displays. The logic is real and tested; what runs it is a Python state machine, not ladder or structured text on PLC hardware, so no scan-cycle timing, no I/O module behaviour and no fail-safe output state is being demonstrated here.',
+    status: IMPLEMENTED_EQUIVALENT,
   },
   {
     name: 'Acquisition',

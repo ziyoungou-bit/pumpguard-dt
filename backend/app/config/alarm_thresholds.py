@@ -28,9 +28,20 @@ standard deviations, and a visible engineering margin, away from the duty
 value. A machine in good order must sit silent, otherwise operators learn to
 ignore the alarm list -- which is how real plants lose their protection.
 
-Vibration limits follow ISO 10816-1 Class I (small machines below 15 kW):
-1.8 mm/s good, 4.5 mm/s satisfactory, 7.1 mm/s unsatisfactory, above that
-unacceptable. Those are the published band edges, used unchanged.
+Vibration limits use the ISO 20816-1 Class I rigid-support zone edges:
+0.71 mm/s (A/B, newly commissioned), 1.8 mm/s (B/C, end of unrestricted
+long-term operation), 4.5 mm/s (C/D, damage may occur). Those are the published
+band edges, used unchanged, over a 10-1000 Hz band.
+
+SCOPE, stated because it matters and because omitting it would be borrowing
+authority this asset has not earned. ISO 10816-3 -- which an earlier version of
+this file cited -- has been withdrawn and replaced by ISO 20816-3. More to the
+point, neither ISO 20816-3 (rated power above 15 kW) nor ISO 20816-7
+(rotodynamic pumps, roughly 1 kW and above) covers a machine developing about
+51 W at the shaft. This asset falls below the scope of every ISO
+vibration-severity standard there is. The numbers are right; the citation was
+not. They are applied BY ANALOGY, not by certification, and every surface that
+displays them says so. Do not remove that statement to tidy a layout.
 """
 
 from __future__ import annotations
@@ -156,13 +167,20 @@ ALARM_LIMITS: tuple[AlarmLimit, ...] = (
     AlarmLimit(
         key="vibration_high",
         tag=ASSET.accelerometer,
-        description="High vibration (ISO 10816-1 Class I)",
+        description="High vibration (ISO 20816-1 Class I band edges, 10-1000 Hz)",
         unit="mm/s",
         direction="high",
-        warning=4.5,
-        alarm=7.1,
-        trip=11.2,
-        critical=18.0,
+        # Escalation mapped onto the zone edges rather than sitting inside one
+        # of them. Warning at the B/C edge is the point the standard calls the
+        # end of unrestricted long-term operation; alarm at C/D is where damage
+        # becomes possible. The warning previously sat at 4.5 -- the C/D edge --
+        # so the first thing an operator heard about a deteriorating machine was
+        # that it had already reached the band named "damage may occur", and the
+        # whole of Zone C passed silently.
+        warning=1.8,
+        alarm=4.5,
+        trip=7.1,
+        critical=11.2,
         deadband=0.4,
     ),
     AlarmLimit(
@@ -221,7 +239,7 @@ class InterlockSettings:
     high_motor_temperature_c: float = 90.0
     high_bearing_temperature_c: float = 80.0
 
-    #: Beyond ISO 10816 Class I "unacceptable" by a factor of ~1.6.
+    #: Beyond ISO 20816-1 Class I "unacceptable" by a factor of ~1.6.
     extreme_vibration_mm_s: float = 18.0
     vibration_delay_s: float = 2.0
 

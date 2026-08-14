@@ -82,7 +82,7 @@ DRY_RUN_CURRENT_RATIO: float = 0.95
 #: rather than only once the pump is already cavitating.
 NPSH_ERODED_M: float = 4.0
 
-#: ISO 10816-1 Class I band edges, used for the vibration term of the health
+#: ISO 20816-1 Class I band edges, used for the vibration term of the health
 #: index. Published values, unchanged.
 ISO_GOOD_MM_S: float = 1.8
 ISO_TRIP_MM_S: float = 11.2
@@ -215,7 +215,7 @@ def physics_diagnosis(telemetry: Telemetry) -> tuple[str, list[DiagnosisEvidence
             "commissioned references",
             telemetry.vibration_rms_mm_s,
             "mm/s",
-            f"ISO 10816-1 Class I good below {ISO_GOOD_MM_S} mm/s",
+            f"ISO 20816-1 Class I good below {ISO_GOOD_MM_S} mm/s",
         )
     )
     return FaultType.NORMAL.value, evidence
@@ -393,7 +393,7 @@ def _imbalance_rule(telemetry: Telemetry, scale: float) -> list[DiagnosisEvidenc
             f"{ratio_2x:.1f}x the commissioned {reference_2x:.2f} mm/s at this speed",
         ),
         _evidence(
-            "Overall vibration against ISO 10816-1 Class I",
+            "Overall vibration against ISO 20816-1 Class I",
             telemetry.vibration_rms_mm_s,
             "mm/s",
             f"good below {ISO_GOOD_MM_S}, unsatisfactory above {_LIMITS['vibration_high'].alarm}",
@@ -430,7 +430,7 @@ def _misalignment_rule(telemetry: Telemetry, scale: float) -> list[DiagnosisEvid
             f"{ratio_1x:.1f}x the commissioned {reference_1x:.2f} mm/s at this speed",
         ),
         _evidence(
-            "Overall vibration against ISO 10816-1 Class I",
+            "Overall vibration against ISO 20816-1 Class I",
             telemetry.vibration_rms_mm_s,
             "mm/s",
             f"good below {ISO_GOOD_MM_S}, unsatisfactory above {_LIMITS['vibration_high'].alarm}",
@@ -455,7 +455,7 @@ HEALTH_WEIGHTS: dict[str, float] = {
 HEALTH_INDEX_LABEL = "Prototype Engineering Health Index"
 HEALTH_INDEX_BASIS = (
     "Prototype Engineering Health Index: a weighted deduction from 100 across vibration "
-    "(ISO 10816-1 Class I band edges), temperature (against this asset's alarm limits), "
+    "(ISO 20816-1 Class I band edges), temperature (against this asset's alarm limits), "
     "hydraulic performance (duty point from the pump curve), the unsupervised anomaly score "
     "and instrument validity. It is this project's own composite, useful for trending on this "
     "asset. It is NOT an ISO-conformant assessment and no ISO conformance is claimed."
@@ -537,7 +537,7 @@ RECOMMENDED_ACTIONS: dict[str, list[str]] = {
         "Trend the 1x amplitude; an unbalance grows slowly and rarely needs an immediate stop.",
         "Inspect the impeller for deposits, erosion or a lost balance weight at the next shutdown.",
         "Check the coupling and shaft for a bent or loose element before balancing.",
-        "Balance the rotor in place if the 1x amplitude passes the ISO 10816-1 Class I 4.5 mm/s band edge.",
+        "Balance the rotor in place if the 1x amplitude passes the ISO 20816-1 Class I 4.5 mm/s band edge.",
     ],
     FaultType.MISALIGNMENT.value: [
         "Trend 2x and the axial channel; misalignment loads the bearings and the seal continuously.",

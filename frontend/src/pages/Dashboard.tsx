@@ -12,7 +12,7 @@ import { useAppState } from '../state/AppState'
 import { assetStateStatus, healthStatus, limitStatus, severityStatus } from '../lib/status'
 import { fmt, fmtPercent, fmtUnit, fmtClock, humanise } from '../lib/format'
 import { ASSET_TAGS, MOTOR } from '../lib/pumpPhysics'
-import { vibrationSeverityZone } from '../lib/vibration'
+import { VIBRATION_BAND_LABEL, vibrationSeverityZone } from '../lib/vibration'
 import { Card, DefinitionRow, Meter, PageHeading, ProvenanceNote, StatTile, StatusBadge } from '../components/ui'
 import { TrendChart } from '../components/charts'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -78,7 +78,7 @@ export function Dashboard() {
             <DefinitionRow label="Anomaly score" value={fmt(telemetry.anomaly_score, 2)} />
             <DefinitionRow
               label="Vibration zone"
-              value={`ISO 10816-3 zone ${zone.zone}`}
+              value={`Zone ${zone.zone} (${VIBRATION_BAND_LABEL})`}
               tone={zone.zone === 'A' || zone.zone === 'B' ? 'ok' : zone.zone === 'C' ? 'warn' : 'alarm'}
             />
           </dl>

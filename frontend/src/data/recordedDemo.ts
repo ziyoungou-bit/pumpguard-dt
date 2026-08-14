@@ -267,7 +267,7 @@ export function demoDiagnosis(frame: Telemetry): Diagnosis {
       statement: `Vibration velocity RMS is ${frame.vibration_rms_mm_s.toFixed(2)} mm/s`,
       measured_value: frame.vibration_rms_mm_s,
       unit: 'mm/s',
-      reference: 'ISO 10816-3 zone B/C boundary at 1.8 mm/s',
+      reference: 'ISO 20816-1 Class I zone B/C boundary at 1.8 mm/s',
     },
     {
       source: 'physics',
@@ -351,7 +351,7 @@ interface AlarmRule {
 const ALARM_RULES: AlarmRule[] = [
   {
     tag: ASSET_TAGS.accelerometer,
-    description: 'Vibration velocity RMS above ISO 10816-3 zone C',
+    description: 'Vibration velocity RMS above ISO 20816-1 Class I zone C',
     severity: 'ALARM',
     unit: 'mm/s',
     threshold: 4.5,
@@ -360,7 +360,7 @@ const ALARM_RULES: AlarmRule[] = [
   },
   {
     tag: ASSET_TAGS.accelerometer,
-    description: 'Vibration velocity RMS above ISO 10816-3 zone B',
+    description: 'Vibration velocity RMS above ISO 20816-1 Class I zone B',
     severity: 'WARNING',
     unit: 'mm/s',
     threshold: 1.8,

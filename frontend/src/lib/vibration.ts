@@ -394,6 +394,27 @@ export const ZONE_C_D_MM_S = 4.5
 /** Frequency band every velocity RMS on this platform is measured over. */
 export const VIBRATION_BAND_LABEL = '10-1000 Hz'
 
+/**
+ * The scope statement that must accompany the alarm bands anywhere they appear.
+ *
+ * Two corrections are folded into it. ISO 10816-3 was withdrawn and replaced by
+ * ISO 20816-3, so citing it dates the work. More importantly, neither ISO
+ * 20816-3 (above 15 kW) nor ISO 20816-7 (rotodynamic pumps, above roughly 1 kW)
+ * covers a machine developing 51 W at the shaft. This asset falls below the
+ * scope of every ISO vibration-severity standard there is.
+ *
+ * The band edges themselves are not wrong -- 0.71 / 1.8 / 4.5 mm/s are the
+ * ISO 20816-1 Class I rigid-support zone boundaries and are used unchanged.
+ * What was wrong was the citation, and a citation to a standard that does not
+ * cover the machine is borrowed authority. Saying so costs nothing and is the
+ * difference between applying a limit and pretending to be certified against
+ * one. Do not delete this note to tidy the UI.
+ */
+export const VIBRATION_SCOPE_NOTE =
+  `Alarm band: ${ZONE_A_B_MM_S} / ${ZONE_B_C_MM_S} / ${ZONE_C_D_MM_S} mm/s RMS (${VIBRATION_BAND_LABEL}). ` +
+  'Derived from ISO 20816-1 Class I boundaries. Note: at ~51 W shaft power this asset falls below ' +
+  'the scope of ISO 20816-3 (>15 kW) and ISO 20816-7; limits are applied by analogy, not by certification.'
+
 export function vibrationSeverityZone(rmsMmS: number): { zone: string; label: string } {
   if (rmsMmS <= ZONE_A_B_MM_S) return { zone: 'A', label: 'Newly commissioned' }
   if (rmsMmS <= ZONE_B_C_MM_S) return { zone: 'B', label: 'Unrestricted long-term operation' }

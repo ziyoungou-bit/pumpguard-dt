@@ -17,7 +17,7 @@ FFT path shows up as a wrong number rather than staying invisible.
 Units and quantity
 ------------------
 Velocity in mm/s. That is what `contracts.Telemetry` carries, it is the
-quantity ISO 10816 / ISO 20816 judges machine severity on, and it is what a
+quantity ISO 20816 judges machine severity on, and it is what a
 vibration analyst reads for shaft-rate faults. Bearing and cavitation work is
 properly done in acceleration, which this rig does not model; the high-frequency
 band here is a *velocity-domain proxy* for that energy, which is honest for a
