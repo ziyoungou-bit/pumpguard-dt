@@ -3,6 +3,15 @@
 # Static hosting on a CDN: no cold start, so the landing page a recruiter opens
 # is always instant even when the backend is still waking up. That split is the
 # reason the frontend carries a recorded-demo fallback.
+#
+# This file must live at the REPOSITORY ROOT, not in frontend/. Netlify reads
+# netlify.toml from the base directory, and until it has read this file it does
+# not know the base directory is `frontend` -- so a copy inside frontend/ is
+# never found and every setting in it is silently ignored. It sat there until
+# the first real deploy attempt, which is exactly the kind of config that looks
+# correct in review and fails once.
+#
+# `publish` is resolved relative to `base`, so "dist" means frontend/dist.
 
 [build]
   base = "frontend"

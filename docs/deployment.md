@@ -63,8 +63,12 @@ free plan; that is the cold start, not a failure.
 
 1. Sign in at <https://netlify.com> with GitHub.
 2. **Add new site → Import an existing project**, pick `pumpguard-dt`.
-   `frontend/netlify.toml` supplies the base directory, build command and
-   publish directory, so accept what it shows.
+   `netlify.toml` at the repository ROOT supplies the base directory
+   (`frontend`), the build command and the publish directory, so accept what it
+   shows. It has to be at the root: Netlify reads netlify.toml from the base
+   directory, and it does not know the base is `frontend` until it has read the
+   file. A copy inside `frontend/` is never found and every setting in it is
+   silently ignored — which is where this file sat until the first real deploy.
 3. Set the environment variables **before** the first build, under
    Site configuration → Environment variables:
 
@@ -76,7 +80,10 @@ VITE_WS_URL       = wss://pumpguard-dt-api.onrender.com
    `wss://`, not `ws://`. The page is served over HTTPS, and a browser blocks a
    plaintext WebSocket from a secure page as mixed content — the connection
    fails silently with nothing useful in the console.
-4. Deploy. Note the URL, e.g. `https://pumpguard-dt.netlify.app`.
+4. Set the site name under Site configuration → Change site name. Use
+   `pumpguard-dt`. Note that `pumpguard.netlify.app` is already taken by an
+   unrelated project — Netlify subdomains are global and first-come.
+5. Deploy. The URL is then `https://pumpguard-dt.netlify.app`.
 
 ---
 
@@ -130,9 +137,14 @@ Three honest options:
    recorded dataset and renders it immediately, labelled "Recorded Demo", while
    the backend wakes in the background and takes over when it responds. Nothing
    is ever blank and nothing pretends to be live. This is the default.
-3. **An uptime pinger** every 10 minutes. This works, but it burns the free
-   plan's monthly instance hours and Render's terms discourage it. Not
-   recommended as the primary approach.
+3. **An uptime pinger** every 10 minutes. `.github/workflows/keep-alive.yml`
+   does this and it is enabled. It works, and the cost is real: it burns the
+   free plan's monthly instance hours, and Render's terms discourage keeping a
+   free service awake artificially. It is in the repo because the alternative
+   during a job search is a recruiter meeting a 50-second wait — but it is a
+   workaround for being on the free plan, not a substitute for option 1. If the
+   instance hours run out before the month ends, disable the workflow rather
+   than wondering why the service stopped.
 
 Do not solve this by faking the data. A recorded demo labelled as recorded is
 honest; a "live" screen driven by a canned array is not, and an interviewer who
