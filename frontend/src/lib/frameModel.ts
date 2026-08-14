@@ -24,7 +24,7 @@ import {
   rotationalFrequencyHz,
   solveOperatingPoint,
 } from './pumpPhysics'
-import { componentsRms, vibrationComponents } from './vibration'
+import { componentsRms, vibrationComponents, vibrationHealthPenalty } from './vibration'
 
 /**
  * Machine geometry the vibration component model needs. Passed in rather than
@@ -205,7 +205,7 @@ export function computeFrame(i: FrameInputs): Telemetry {
   // Health index is a transparent penalty sum, shown as such on the
   // Engineering page. It is deliberately not a learned score: an unexplainable
   // health number is not something a maintenance engineer can act on.
-  const vibrationPenalty = Math.max(0, (rms - 1.8) * 12)
+  const vibrationPenalty = vibrationHealthPenalty(rms)
   // Expressed as a fraction of the BEP efficiency, not as an absolute
   // efficiency. An absolute threshold silently becomes an always-on penalty the
   // moment the peak efficiency of the machine is corrected.

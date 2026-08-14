@@ -52,8 +52,21 @@ const TICK_MS = DEMO_TICK_S * 1000
 const HISTORY_LIMIT = 3600 // 30 minutes at 0.5 s
 const LIVE_TIMEOUT_MS = 4000
 const BACKOFF_BASE_MS = 1000
-const BACKOFF_MAX_MS = 20000
+/**
+ * Backoff ceiling, 60 s. Sized to the thing being waited for: the API is on a
+ * free Render instance that sleeps after about 15 minutes idle and takes close
+ * to a minute to come back. A 20 s ceiling meant a visitor's tab hammered a
+ * container that was already starting as fast as it could.
+ */
+const BACKOFF_MAX_MS = 60000
 const POLL_MS = 2500
+
+/**
+ * How long the first connection is treated as a cold start rather than a
+ * failure. Render's free tier is documented at roughly 50 s to wake; 75 s
+ * leaves margin before the UI stops promising the backend is coming.
+ */
+const COLD_START_WINDOW_MS = 75000
 
 export interface AppStateValue {
   telemetry: Telemetry
@@ -65,6 +78,18 @@ export interface AppStateValue {
   /** True while the first connection attempt is still outstanding. */
   connecting: boolean
   reconnectAttempts: number
+  /**
+   * True while the backend has never answered and we are still inside the
+   * cold-start window. The distinction matters to the reader: "waking up, this
+   * takes a minute" and "unreachable" call for different amounts of patience,
+   * and showing the second when the first is true is what makes a visitor close
+   * the tab 40 seconds before the site would have worked.
+   */
+  wakingUp: boolean
+  /** Seconds spent waiting for the first frame. Drives the progress readout. */
+  waitingSeconds: number
+  /** Expected cold-start duration in seconds, for the progress indicator. */
+  coldStartWindowSeconds: number
   sessionId?: string
   /** Present only when the backend supplied it. */
   diagnosisFromApi: boolean
@@ -107,6 +132,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [sim, setSim] = useState<LocalSimState>(initialLocalSimState)
   const [acknowledged, setAcknowledged] = useState<Record<number, string>>({})
   const [lastCommandFeedback, setLastCommandFeedback] = useState('')
+  const [waitingSeconds, setWaitingSeconds] = useState(0)
+  const [everConnected, setEverConnected] = useState(false)
+  const mountedAtRef = useRef(Date.now())
 
   // Refs mirror the pieces the timers and socket handlers need, so those
   // callbacks never close over stale state.
@@ -172,6 +200,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           if (typeof frame?.rpm !== 'number' || typeof frame?.vibration_rms_mm_s !== 'number') return
           lastFrameAtRef.current = Date.now()
           setConnecting(false)
+          setEverConnected(true)
           if (connectionRef.current !== 'live') setConnection('live')
           pushFrame(frame)
         } catch {
@@ -245,6 +274,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }, TICK_MS)
     return () => window.clearInterval(id)
   }, [pushFrame])
+
+  // ------------------------------------------------------- cold-start clock
+  // Ticks only until the backend first answers. Its whole job is to let the UI
+  // say how long the wait has been and how much of the expected wake time is
+  // left, instead of showing an unqualified "unreachable" from the first second.
+  useEffect(() => {
+    if (everConnected) return
+    const id = window.setInterval(() => {
+      setWaitingSeconds(Math.round((Date.now() - mountedAtRef.current) / 1000))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [everConnected])
 
   // --------------------------------------------------- diagnosis + alarm poll
   useEffect(() => {
@@ -440,6 +481,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       demoMode,
       connecting,
       reconnectAttempts,
+      wakingUp: !everConnected && waitingSeconds * 1000 < COLD_START_WINDOW_MS,
+      waitingSeconds,
+      coldStartWindowSeconds: COLD_START_WINDOW_MS / 1000,
       sessionId,
       diagnosisFromApi: apiDiagnosis !== null,
       valveOpening,
@@ -467,6 +511,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       demoMode,
       connecting,
       reconnectAttempts,
+      everConnected,
+      waitingSeconds,
       sessionId,
       apiDiagnosis,
       valveOpening,
@@ -486,12 +532,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>
 }
 
-/** Label shown in the header. Never says "live" unless the socket is live. */
-export function dataSourceLabel(connection: ConnectionMode, telemetry: Telemetry): string {
+/**
+ * Label shown in the header. Never says "live" unless the socket is live.
+ *
+ * REPLAY MODE and BROWSER MODEL are kept apart because they are different
+ * claims: one is a fixed recording being played back, the other is a live
+ * computation that responds to the controls. Collapsing them into one
+ * "recorded demo" label meant the SCADA page appeared to be replaying a tape
+ * while it was in fact executing the state machine the visitor was driving.
+ */
+export function dataSourceLabel(
+  connection: ConnectionMode,
+  telemetry: Telemetry,
+  demoMode: DemoMode = 'replay',
+): string {
   if (connection === 'live') {
     return telemetry.data_source === DataSource.LIVE_DEVICE ? 'LIVE DEVICE' : 'SIMULATION'
   }
-  return 'RECORDED DEMO'
+  return demoMode === 'interactive' ? 'BROWSER MODEL' : 'REPLAY MODE'
+}
+
+/** Dataset time as mm:ss, for replay. Never the visitor's wall clock. */
+export function datasetClock(elapsedS: number): string {
+  const total = Math.max(0, Math.floor(elapsedS))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
 export const isRunning = (state: string) =>

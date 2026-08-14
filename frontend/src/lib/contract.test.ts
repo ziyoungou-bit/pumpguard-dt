@@ -109,8 +109,28 @@ describe('telemetry contract', () => {
   })
 
   it('exercises more than one condition, so the demo is not a flat line', () => {
+    // Was `> 2`, when the recording was a 300 s tour of four faults. The default
+    // loop is now a single 90 s imbalance arc: shortened deliberately, because a
+    // five-minute script means a visitor can arrive four minutes from anything
+    // happening. Variety did not disappear -- every fault is still injectable
+    // from the Simulation Lab -- so what this guard should protect is that the
+    // DEFAULT view moves, which is asserted properly below rather than by
+    // counting fault labels.
     const conditions = new Set(DEMO_FRAMES.map((frame) => frame.fault_state))
-    expect(conditions.size).toBeGreaterThan(2)
+    expect(conditions.size).toBeGreaterThanOrEqual(2)
+  })
+
+  it('moves far enough that every panel has something to show', () => {
+    const spread = (read: (f: (typeof DEMO_FRAMES)[number]) => number) => {
+      const values = DEMO_FRAMES.map(read)
+      return Math.max(...values) - Math.min(...values)
+    }
+    // Vibration crosses at least one severity zone edge, health visibly falls,
+    // and the anomaly detector has a range to separate. A flat line fails all
+    // three however many fault labels the script contains.
+    expect(spread((f) => f.vibration_rms_mm_s)).toBeGreaterThan(1.0)
+    expect(spread((f) => f.health_index)).toBeGreaterThan(10)
+    expect(spread((f) => f.anomaly_score)).toBeGreaterThan(0.1)
   })
 })
 

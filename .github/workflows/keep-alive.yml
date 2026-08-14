@@ -1,0 +1,61 @@
+# Keeps the API awake so a visitor does not meet a cold start.
+#
+# The backend runs on Render's free tier, which suspends a service after about
+# 15 minutes without traffic and then takes close to a minute to wake. On a
+# portfolio site that minute is the whole visit: a recruiter opening the link
+# sees a "waking up" banner, waits, and leaves. The UI handles that window
+# honestly (see ColdStartBanner in AppShell.tsx), but the cheapest fix is to
+# stop the window from existing.
+#
+# A GET every 10 minutes is comfortably inside the 15-minute idle timeout with
+# room for a skipped run -- GitHub's scheduled runners are best-effort and can
+# be delayed by several minutes under load, so 14 minutes would not be safe.
+#
+# Cost: 144 requests a day against a health endpoint that touches no simulation
+# state. This is deliberately a keep-alive and not a synthetic monitor; it does
+# not assert on the payload beyond the status code, because a health check that
+# fails the build on a slow response would page nobody and annoy everybody.
+
+name: Keep the API awake
+
+on:
+  schedule:
+    # Every 10 minutes. Times are UTC.
+    - cron: '*/10 * * * *'
+  # Manual trigger, for warming the service before a demo or an interview.
+  workflow_dispatch:
+
+# Never let two pings overlap if one run is slow; the later one is the useful
+# one, so cancel the earlier rather than queueing.
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the health endpoint
+        env:
+          # Overridable via a repository variable so a fork or a renamed service
+          # does not need a code change.
+          API_URL: ${{ vars.API_BASE_URL || 'https://pumpguard-dt-api.onrender.com' }}
+        run: |
+          set -euo pipefail
+          # --max-time 90 rather than the default: if the service HAS gone to
+          # sleep, this request is the one paying for the wake, and timing out
+          # at 30 s would abandon it half-started and leave the next visitor to
+          # pay again.
+          status=$(curl --silent --show-error --location \
+                        --max-time 90 \
+                        --retry 2 --retry-delay 10 --retry-all-errors \
+                        --output /dev/null --write-out '%{http_code}' \
+                        "${API_URL}/api/health")
+          echo "GET ${API_URL}/api/health -> ${status}"
+          if [ "${status}" != "200" ]; then
+            echo "::warning::Health endpoint returned ${status}"
+          fi

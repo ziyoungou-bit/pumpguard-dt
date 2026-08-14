@@ -387,9 +387,43 @@ export function synthesiseVibration(params: VibrationSynthesisParams): Synthetic
  * certification. Naming a standard that does not cover the machine would be
  * the kind of borrowed authority this project exists to avoid.
  */
+export const ZONE_A_B_MM_S = 0.71
+export const ZONE_B_C_MM_S = 1.8
+export const ZONE_C_D_MM_S = 4.5
+
+/** Frequency band every velocity RMS on this platform is measured over. */
+export const VIBRATION_BAND_LABEL = '10-1000 Hz'
+
 export function vibrationSeverityZone(rmsMmS: number): { zone: string; label: string } {
-  if (rmsMmS <= 0.71) return { zone: 'A', label: 'Newly commissioned' }
-  if (rmsMmS <= 1.8) return { zone: 'B', label: 'Unrestricted long-term operation' }
-  if (rmsMmS <= 4.5) return { zone: 'C', label: 'Restricted operation' }
+  if (rmsMmS <= ZONE_A_B_MM_S) return { zone: 'A', label: 'Newly commissioned' }
+  if (rmsMmS <= ZONE_B_C_MM_S) return { zone: 'B', label: 'Unrestricted long-term operation' }
+  if (rmsMmS <= ZONE_C_D_MM_S) return { zone: 'C', label: 'Restricted operation' }
   return { zone: 'D', label: 'Damage may occur' }
+}
+
+/**
+ * Health penalty from overall vibration, in health points.
+ *
+ * Piecewise-linear with the slope changing at each zone edge, and starting from
+ * ZERO rather than from a dead band. The dead band is what this replaces: the
+ * penalty used to begin at 1.8 mm/s, so a machine at 0.99 mm/s -- already out
+ * of Zone A and into "unrestricted long-term operation" -- scored a flat 100
+ * while the diagnosis panel beside it was naming a fault. "Imbalance, MINOR,
+ * severity 0.13" next to "Health 100/100, no significant degradation" is a
+ * contradiction the reader has to resolve, and they will resolve it by
+ * distrusting both numbers.
+ *
+ * Starting the slope at zero also stops a healthy machine reporting a suspiciously
+ * round 100. Nothing real scores exactly full marks; this asset sits near 97.
+ */
+export function vibrationHealthPenalty(rmsMmS: number): number {
+  const rms = Math.max(0, rmsMmS)
+  const inZoneA = Math.min(rms, ZONE_A_B_MM_S)
+  const inZoneB = Math.min(Math.max(rms - ZONE_A_B_MM_S, 0), ZONE_B_C_MM_S - ZONE_A_B_MM_S)
+  const inZoneC = Math.min(Math.max(rms - ZONE_B_C_MM_S, 0), ZONE_C_D_MM_S - ZONE_B_C_MM_S)
+  const inZoneD = Math.max(rms - ZONE_C_D_MM_S, 0)
+  // Slopes rise zone by zone: staying inside A costs almost nothing, crossing
+  // into C costs real points, and D falls away steeply because that band is
+  // defined as "damage may occur".
+  return 4 * inZoneA + 11 * inZoneB + 22 * inZoneC + 40 * inZoneD
 }

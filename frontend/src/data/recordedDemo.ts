@@ -15,14 +15,30 @@
  * costs a few milliseconds and avoids shipping a megabyte of JSON for the same
  * 300 seconds of data.
  *
- * Scripted scenario, chosen to exercise every page:
- *   0-10 s     OFF
- *   10-30 s    STARTING, speed ramping to 1450 rpm
- *   30-90 s    RUNNING healthy near the best efficiency point
- *   90-150 s   flow restriction developing (head up, flow down, efficiency down)
- *   150-200 s  recovery to healthy
- *   200-260 s  imbalance growing (1x rising, 2x flat)
- *   260-300 s  cavitation (NPSH margin lost, broadband HF energy up)
+ * Scripted scenario. It opens ON A RUNNING MACHINE and loops in 90 seconds.
+ *
+ * The previous script opened with ten seconds of OFF followed by a start ramp.
+ * That is the honest order of events for a machine, and it was the wrong
+ * decision for a page a visitor opens cold: the first thing on screen was a
+ * column of zeros on every panel, which reads as a broken site rather than as a
+ * stopped pump. A machine at rest is indistinguishable from a machine that
+ * failed to load. So the recording begins at the duty point and the start
+ * sequence is available on the SCADA page, where someone is choosing to watch
+ * it.
+ *
+ *   0-60 s     RUNNING healthy at the duty point, vibration in Zone A
+ *   60-78 s    imbalance developing, severity ramping 0 -> 0.6
+ *                -- RMS crosses 0.71 mm/s within the first second or two of
+ *                   the ramp (Zone A/B), health starts falling
+ *                -- RMS passes 1.8 mm/s (Zone B/C) and raises a warning
+ *                -- the diagnosis moves to imbalance and gains confidence as
+ *                   1x separates from 2x
+ *   78-86 s    held at severity 0.6: alarm listed, work order raisable
+ *   86-90 s    fault cleared, back to the duty point, and the loop repeats
+ *
+ * 90 s is chosen so that a visitor who arrives at any moment sees the whole
+ * arc without waiting: the longest they can be from the interesting part is
+ * about a minute, and the Recruiter Mode tour has a complete story to point at.
  */
 
 import type { Alarm, Diagnosis, Telemetry } from '../types/contracts'
@@ -32,8 +48,14 @@ import { ASSET_TAGS, MOTOR, THERMAL } from '../lib/pumpPhysics'
 import { seededRandom } from '../lib/vibration'
 
 export const DEMO_TICK_S = 0.5
-const DEMO_DURATION_S = 300
+export const DEMO_DURATION_S = 90
 const DEMO_SEED = 20260813
+/**
+ * Epoch of the recording, fixed. Timestamps in the replay are dataset time, not
+ * the visitor's wall clock: a recorded dataset stamped with "now" invites the
+ * reader to believe it is live, and the badge saying otherwise cannot outshout
+ * a clock that agrees with their watch.
+ */
 const DEMO_START_MS = Date.UTC(2026, 2, 14, 9, 0, 0)
 
 interface Phase {
@@ -43,25 +65,33 @@ interface Phase {
   fault_state: string
   /** Severity reached at the END of the phase; ramps linearly across it. */
   severity_end: number
+  /** Severity at the START. Defaults to 0, so a phase ramps up from healthy. */
+  severity_start?: number
   valve_opening: number
   rpm_setpoint: number
 }
 
 const PHASES: Phase[] = [
-  { from_s: 0, to_s: 10, asset_state: AssetState.OFF, fault_state: FaultType.NORMAL, severity_end: 0, valve_opening: 1, rpm_setpoint: 0 },
-  { from_s: 10, to_s: 30, asset_state: AssetState.STARTING, fault_state: FaultType.NORMAL, severity_end: 0, valve_opening: 1, rpm_setpoint: 1450 },
-  { from_s: 30, to_s: 90, asset_state: AssetState.RUNNING, fault_state: FaultType.NORMAL, severity_end: 0, valve_opening: 1, rpm_setpoint: 1450 },
-  { from_s: 90, to_s: 150, asset_state: AssetState.RUNNING, fault_state: FaultType.FLOW_RESTRICTION, severity_end: 0.72, valve_opening: 1, rpm_setpoint: 1450 },
-  { from_s: 150, to_s: 200, asset_state: AssetState.RUNNING, fault_state: FaultType.NORMAL, severity_end: 0, valve_opening: 1, rpm_setpoint: 1450 },
-  { from_s: 200, to_s: 260, asset_state: AssetState.RUNNING, fault_state: FaultType.IMBALANCE, severity_end: 0.68, valve_opening: 0.95, rpm_setpoint: 1450 },
-  { from_s: 260, to_s: DEMO_DURATION_S + 1, asset_state: AssetState.RUNNING, fault_state: FaultType.CAVITATION, severity_end: 0.65, valve_opening: 1, rpm_setpoint: 1450 },
+  // Healthy duty. Long enough that the steady state is obviously steady rather
+  // than a transient someone caught mid-swing.
+  { from_s: 0, to_s: 60, asset_state: AssetState.RUNNING, fault_state: FaultType.NORMAL, severity_end: 0, valve_opening: 1, rpm_setpoint: 1450 },
+  // Imbalance developing. Ramped, not stepped: a rotor does not become
+  // unbalanced between two samples, and a step would let a detector "work" by
+  // spotting the discontinuity rather than the signature.
+  { from_s: 60, to_s: 78, asset_state: AssetState.RUNNING, fault_state: FaultType.IMBALANCE, severity_end: 0.6, valve_opening: 1, rpm_setpoint: 1450 },
+  // Held, so the alarm list, the diagnosis confidence and the work order all
+  // have time to be read rather than flashing past.
+  { from_s: 78, to_s: 86, asset_state: AssetState.RUNNING, fault_state: FaultType.IMBALANCE, severity_end: 0.6, severity_start: 0.6, valve_opening: 1, rpm_setpoint: 1450 },
+  // Cleared, back to duty, and the loop closes.
+  { from_s: 86, to_s: DEMO_DURATION_S + 1, asset_state: AssetState.RUNNING, fault_state: FaultType.NORMAL, severity_end: 0, valve_opening: 1, rpm_setpoint: 1450 },
 ]
 
 function phaseAt(elapsed: number): { phase: Phase; severity: number; progress: number } {
   const phase = PHASES.find((p) => elapsed >= p.from_s && elapsed < p.to_s) ?? PHASES[PHASES.length - 1]
   const span = Math.max(1e-6, phase.to_s - phase.from_s)
   const progress = Math.min(1, Math.max(0, (elapsed - phase.from_s) / span))
-  return { phase, severity: phase.severity_end * progress, progress }
+  const start = phase.severity_start ?? 0
+  return { phase, severity: start + (phase.severity_end - start) * progress, progress }
 }
 
 function buildFrames(): Telemetry[] {

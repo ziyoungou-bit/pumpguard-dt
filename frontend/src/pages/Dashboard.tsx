@@ -31,7 +31,11 @@ export function Dashboard() {
     <div className="space-y-5">
       <PageHeading
         title="Dashboard"
-        description="Live condition of the MTR-101 / P-101 motor-pump set. All values are engineering quantities with units; none are decorative."
+        description={
+          connection === 'live'
+            ? 'Live condition of the MTR-101 / P-101 motor-pump set. All values are engineering quantities with units; none are decorative.'
+            : 'Condition of the MTR-101 / P-101 motor-pump set, replayed from the bundled recording. All values are engineering quantities with units; none are decorative.'
+        }
       />
 
       {/* --- headline condition -------------------------------------------- */}
