@@ -8,122 +8,48 @@
  *      physically coherent dataset when the API is unreachable. Replaying
  *      random numbers on a page that claims to model a pump would be dishonest.
  *
- * The constants are copied from backend/app/config/pump_parameters.py. They are
- * duplicated across a language boundary, which is the one place duplication is
- * unavoidable; if the backend parameters change, this file must be updated with
- * them. Nothing here is used when the live API is connected -- the backend's
- * numbers always win.
+ * The CONSTANTS are not written here. They are generated from
+ * backend/app/config/pump_parameters.py into ./pumpParameters.generated.ts by
+ * scripts/export_parameters.py, and re-exported below so every existing import
+ * of PUMP / CIRCUIT / MOTOR from this module keeps working. They used to be
+ * hand-copied, with a comment claiming the duplication was unavoidable and had
+ * to be maintained by hand. It was not: this file subtracted the full 1.2 m
+ * suction lift where the backend subtracted the net 0.4 m, so every NPSH figure
+ * in the UI was 0.8 m out against the backend that supposedly owned the physics.
+ * A test now fails if the generated file goes stale.
+ *
+ * The FUNCTIONS below are a genuine port -- the same equations written twice in
+ * two languages -- because the browser must evaluate them with no backend.
+ * Behaviour cannot be projected the way data can. Nothing here is used when the
+ * live API is connected: the backend's numbers always win.
  *
  *     Pump:    H_p(Q) = H0(N) - a * Q^2
  *     System:  H_s(Q) = H_static + K(valve) * Q^2
  *     Operate: Q* = sqrt((H0 - H_static) / (a + K))
  */
 
-export const LPM_PER_M3S = 60000
+export {
+  ASSET_TAGS,
+  BEARING,
+  CIRCUIT,
+  FLUID,
+  HEAD_COEFFICIENT,
+  LPM_PER_M3S,
+  MOTOR,
+  PUMP,
+  SPECIFIC_SPEED_NQ,
+  THERMAL,
+} from './pumpParameters.generated'
 
-export const FLUID = {
-  density: 998.2, // kg/m^3
-  gravity: 9.80665, // m/s^2
-  vapour_pressure: 2339.0, // Pa abs
-  atmospheric_pressure: 101325.0, // Pa abs
-}
+import {
+  CIRCUIT,
+  FLUID,
+  HEAD_COEFFICIENT,
+  LPM_PER_M3S,
+  MOTOR,
+  PUMP,
+} from './pumpParameters.generated'
 
-export const PUMP = {
-  tag: 'P-101',
-  rated_speed_rpm: 1450.0,
-  shutoff_head_m: 12.0,
-  duty_flow_lpm: 20.0,
-  duty_head_m: 8.0,
-  bep_flow_lpm: 22.0,
-  /**
-   * Peak efficiency at the BEP. Set from the specific speed, not from a
-   * catalogue guess -- see SPECIFIC_SPEED_NQ below.
-   */
-  bep_efficiency: 0.42,
-  impeller_diameter_m: 0.105,
-  suction_diameter_m: 0.025,
-  discharge_diameter_m: 0.02,
-  impeller_vanes: 6,
-}
-
-export const MOTOR = {
-  tag: 'MTR-101',
-  rated_power_w: 120.0,
-  rated_speed_rpm: 1450.0,
-  synchronous_speed_rpm: 1500.0,
-  supply_frequency_hz: 50.0,
-  poles: 4,
-  rated_voltage_v: 230.0,
-  phases: 1,
-  power_factor: 0.82,
-  efficiency: 0.72,
-  no_load_current_a: 0.42,
-  rated_current_a: 0.95,
-  parasitic_loss_at_rated_w: 9.0,
-}
-
-export const CIRCUIT = {
-  static_head_m: 2.0,
-  pipe_resistance: 4.26e7,
-  valve_resistance_open: 0.3e7,
-  valve_resistance_closed: 4.0e9,
-  suction_resistance: 0.45e7,
-  suction_lift_m: 1.2,
-  reservoir_level_m: 0.8,
-}
-
-export const BEARING = {
-  designation: '6205',
-  rolling_elements: 9,
-  ball_diameter_mm: 7.94,
-  pitch_diameter_mm: 39.04,
-  contact_angle_deg: 0.0,
-}
-
-export const THERMAL = {
-  ambient_c: 23.0,
-  motor_rise_at_rated_c: 42.0,
-  bearing_rise_at_rated_c: 28.0,
-}
-
-export const ASSET_TAGS = {
-  motor: 'MTR-101',
-  pump: 'P-101',
-  accelerometer: 'ACC-101',
-  motor_temperature: 'TT-101',
-  bearing_temperature: 'TT-102',
-  suction_pressure: 'PT-101',
-  discharge_pressure: 'PT-102',
-  flow: 'FT-101',
-  current: 'CT-101',
-  speed: 'RPM-101',
-} as const
-
-/** a in H = H0 - a Q^2, m/(m^3/s)^2, derived from the two catalogue points. */
-export const HEAD_COEFFICIENT =
-  (PUMP.shutoff_head_m - PUMP.duty_head_m) / Math.pow(PUMP.duty_flow_lpm / LPM_PER_M3S, 2)
-
-/**
- * Specific speed n_q = N * sqrt(Q) / H^0.75, evaluated at the rated duty point
- * with N in rpm, Q in m^3/s and H in m. Computed, never typed in, so it always
- * agrees with the three numbers above.
- *
- *     n_q = 1450 * sqrt(3.333e-4) / 8^0.75 = 5.6
- *
- * This is the number that fixes PUMP.bep_efficiency. Conventional centrifugal
- * impellers sit at n_q 10-80; below about 10 the impeller passage is so narrow
- * that disc friction on the shroud faces and volumetric leakage past the wear
- * ring dominate the loss budget, and measured peak efficiency for this size and
- * shape falls in the 35-45 % band (Gulich, Centrifugal Pumps, ch. 3.6-3.7,
- * efficiency-vs-n_q correlation). 42 % is the middle of that band.
- *
- * The previous 62 % was a value borrowed from a mid-n_q machine. It understated
- * shaft power by a third, which propagated straight through to motor loading
- * and the thermal model.
- */
-export const SPECIFIC_SPEED_NQ =
-  (PUMP.rated_speed_rpm * Math.sqrt(PUMP.duty_flow_lpm / LPM_PER_M3S)) /
-  Math.pow(PUMP.duty_head_m, 0.75)
 
 export const lpmToM3s = (lpm: number) => lpm / LPM_PER_M3S
 export const m3sToLpm = (m3s: number) => m3s * LPM_PER_M3S

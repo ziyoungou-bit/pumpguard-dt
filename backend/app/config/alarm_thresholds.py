@@ -9,9 +9,19 @@ fully open), which is the reference a commissioning engineer would use:
 
     flow            21.0 L/min        suction pressure    92.0 kPa a
     head            7.59 m            discharge pressure 166.3 kPa a
-    efficiency      61.9 %            current             0.563 A
-    NPSH margin     6.95 m            vibration RMS      ~0.75 mm/s
-    motor temp      ~41 C steady      bearing temp       ~35 C steady
+    efficiency      41.9 %            current             0.671 A
+    NPSH margin     7.02 m            vibration RMS      ~0.75 mm/s
+    motor temp      ~58 C steady      bearing temp       ~46 C steady
+
+Those last two rows moved a long way when the peak efficiency was corrected
+from 62 % to 42 % on the specific-speed argument in pump_parameters.py. Shaft
+power at duty rose from 51 W to 71 W, so the motor now sits at about 82 % of
+its 120 W rating instead of 59 %, and the steady winding temperature rose with
+it. The 65 C warning limit below therefore has roughly 7 C of headroom rather
+than 24 C. That is thin but genuine: it is what this motor does at this duty,
+and the previous comfortable margin was an artefact of understated shaft power,
+not of a well-chosen motor. Resizing the motor is a design decision, not a
+threshold decision, so the limits are left where the insulation class puts them.
 
 The rule applied throughout: the nearest limit sits at least ten healthy
 standard deviations, and a visible engineering margin, away from the duty

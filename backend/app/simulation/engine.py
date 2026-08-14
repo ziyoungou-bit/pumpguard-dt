@@ -213,7 +213,7 @@ class SimulationSession:
         # restriction, so NPSHa falls out of the same equation that produces a
         # healthy margin -- there is no "cavitating" flag anywhere.
         suction_pa = pump_model.suction_pressure_pa(flow_m3s, blockage=effects.suction_restriction)
-        npsh_margin = pump_model.cavitation_margin(flow_m3s, effects.suction_restriction)
+        npsh_margin = pump_model.cavitation_margin(flow_m3s, effects.suction_restriction, rpm)
 
         # Below zero margin the vapour bubbles collapse in the impeller:
         # partial head breakdown plus the characteristic unsteadiness. Two

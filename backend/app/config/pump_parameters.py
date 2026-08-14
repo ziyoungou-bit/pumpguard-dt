@@ -20,6 +20,7 @@ suit this asset):
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 # --------------------------------------------------------------------------
@@ -56,8 +57,16 @@ class PumpParameters:
           = 4.0 / (3.3333e-4)^2
           = 3.60e7  m / (m^3/s)^2
 
-    Efficiency is modelled as an inverted parabola peaking at the best
-    efficiency point, which is the usual first-order shape.
+    Efficiency is the standard parabola about the best efficiency point,
+
+        eta(Q) = eta_BEP [ 2x - x^2 ],   x = Q_reduced / Q_BEP
+
+    which vanishes at Q = 0 and at 2 Q_BEP and peaks at eta_BEP. It carries no
+    width parameter and no floor. An earlier version had both -- a span of
+    26 L/min against a BEP flow of 22, plus a 5 % floor -- and the two together
+    put the efficiency at 5 % of BEP flow at 21 %, where the standard shape
+    gives under 4 %. That made the low-flow region (recirculation, temperature
+    rise, radial load) look far milder than it is.
     """
 
     tag: str = "P-101"
@@ -66,13 +75,10 @@ class PumpParameters:
     duty_flow_lpm: float = 20.0
     duty_head_m: float = 8.0
 
-    # Best efficiency point.
+    # Best efficiency point. eta_BEP follows from the specific speed below, it
+    # is not a catalogue guess -- see the specific_speed_nq docstring.
     bep_flow_lpm: float = 22.0
-    bep_efficiency: float = 0.62
-    # Width of the efficiency parabola: efficiency falls to zero this far from
-    # BEP in either direction, in L/min.
-    efficiency_span_lpm: float = 26.0
-    minimum_efficiency: float = 0.05
+    bep_efficiency: float = 0.42
 
     impeller_diameter_m: float = 0.105
     suction_diameter_m: float = 0.025
@@ -85,6 +91,29 @@ class PumpParameters:
         """`a` in H = H0 - a Q^2, in m/(m^3/s)^2, derived from the two points."""
         duty_flow_m3s = self.duty_flow_lpm / 60000.0
         return (self.shutoff_head_m - self.duty_head_m) / (duty_flow_m3s**2)
+
+    @property
+    def specific_speed_nq(self) -> float:
+        """n_q = N sqrt(Q) / H^0.75 at the rated duty point.
+
+        With N in rpm, Q in m^3/s and H in m:
+
+            n_q = 1450 * sqrt(3.333e-4) / 8^0.75 = 5.6
+
+        This is the number that fixes bep_efficiency. Conventional centrifugal
+        impellers sit at n_q 10-80; below about 10 the impeller passage is so
+        narrow that disc friction on the shroud faces and volumetric leakage
+        past the wear ring dominate the loss budget, and measured peak
+        efficiency for this size and shape falls in the 35-45 % band (Gulich,
+        Centrifugal Pumps, ch. 3.6-3.7, efficiency-vs-n_q correlation). 42 % is
+        the middle of that band.
+
+        The value used before was 62 %, borrowed from a mid-n_q machine. It
+        understated shaft power by about a third, which propagated into motor
+        loading, the current signature and the thermal model.
+        """
+        duty_flow_m3s = self.duty_flow_lpm / 60000.0
+        return self.rated_speed_rpm * math.sqrt(duty_flow_m3s) / self.duty_head_m**0.75
 
 
 # --------------------------------------------------------------------------

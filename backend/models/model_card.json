@@ -1,6 +1,6 @@
 {
   "name": "PumpGuard DT fault classifier and anomaly detector",
-  "created_at": "2026-08-13T12:27:27.587522+00:00",
+  "created_at": "2026-08-14T00:25:51.138606+00:00",
   "feature_order": [
     "rpm",
     "flow_lpm",
@@ -58,8 +58,8 @@
     },
     "trained_on": "NORMAL rows only",
     "score_reference": [
-      0.14039977632178166,
-      -0.07019022600291008
+      0.1394052927885861,
+      -0.06449066627483702
     ]
   },
   "split": {
@@ -67,12 +67,12 @@
     "why": "Frames inside one run are consecutive ticks of one machine at one operating point and are near-duplicates. A random row split puts near-identical twins on both sides and measures memorisation."
   },
   "headline_metrics": {
-    "accuracy": 0.8810483870967742,
-    "f1_macro": 0.9153467693251512,
-    "anomaly_roc_auc": 0.9086342669547871
+    "accuracy": 0.8835685483870968,
+    "f1_macro": 0.9167054637169088,
+    "anomaly_roc_auc": 0.9043526291001772
   },
   "dataset_metadata": {
-    "generated_at": "2026-08-13T12:27:20.361898+00:00",
+    "generated_at": "2026-08-14T00:25:43.584814+00:00",
     "seed": 20260812,
     "schema": {
       "metadata_columns": [

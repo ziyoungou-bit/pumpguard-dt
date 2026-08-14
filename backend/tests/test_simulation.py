@@ -50,8 +50,8 @@ def test_healthy_duty_run_raises_no_alarms_for_60_seconds():
     steady = frames[-1]
     assert steady.flow_lpm == pytest.approx(DUTY_FLOW_LPM, abs=0.5)
     assert steady.pump_head_m == pytest.approx(7.59, abs=0.1)
-    assert steady.motor_current_a == pytest.approx(0.563, abs=0.02)
-    assert steady.pump_efficiency == pytest.approx(0.619, abs=0.01)
+    assert steady.motor_current_a == pytest.approx(0.671, abs=0.02)
+    assert steady.pump_efficiency == pytest.approx(0.419, abs=0.01)
     assert steady.npsh_margin_m > 5.0
     assert steady.fault_state == FaultType.NORMAL.value
     assert steady.health_index == pytest.approx(100.0, abs=0.5)
@@ -181,7 +181,7 @@ def test_frozen_flow_transmitter_is_flagged_but_the_process_is_untouched():
 
     # ... and the pump is doing exactly what it was doing before.
     assert session.truth["flow_lpm"] == pytest.approx(true_flow_before, rel=0.01)
-    assert session.truth["motor_current_a"] == pytest.approx(0.563, abs=0.02)
+    assert session.truth["motor_current_a"] == pytest.approx(0.671, abs=0.02)
     assert session.state == AssetState.RUNNING.value
     assert frames[-1].fault_state == FaultType.SENSOR_FAULT.value
 

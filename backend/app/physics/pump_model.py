@@ -240,21 +240,37 @@ def _shaft_power(
 
 
 def pump_efficiency(flow_lpm: float, speed_rpm: float, pump: PumpParameters = PUMP) -> float:
-    """Inverted parabola centred on the best efficiency point.
+    """Standard parabola looked up on the REDUCED flow.
 
-    BEP flow shifts with speed by the affinity law Q ~ N, so running slower
-    moves the peak rather than keeping it fixed.
+        Q_reduced = Q * N_rated / N
+        eta       = eta_BEP [ 2x - x^2 ],   x = Q_reduced / Q_BEP
+
+    Why reduced flow and not absolute flow. The affinity laws map every point on
+    the characteristic onto a homologous point at another speed -- Q ~ N,
+    H ~ N^2, P ~ N^3 -- with efficiency invariant along that mapping. So what
+    fixes the efficiency of the machine is where it sits on its OWN curve, not
+    how many litres per minute leave the discharge. Dividing the absolute flow
+    back to rated speed is exactly that coordinate. Looking eta up on absolute
+    flow instead nails the BEP to a fixed 22 L/min, so at half speed the pump is
+    reported as running far off BEP when it is in fact sitting precisely on it.
+
+    The parabola vanishes at Q = 0 and at 2 Q_BEP. There is deliberately no
+    floor: hydraulic power rho g Q H goes to zero with Q while disc friction and
+    mechanical loss do not, so efficiency near shutoff really is a single-digit
+    number, and eta(0) is 0.
+
+    Stopped guard: eta = 0 when speed_rpm = 0 -- there is no operating point to
+    be efficient at. This branch is printed on the Engineering page rather than
+    hidden, because a guard that silently improves a number is how a formula
+    stops matching its own display.
     """
     if flow_lpm <= 0.0 or speed_rpm <= 0.0:
         return 0.0
-    speed_ratio = speed_rpm / pump.rated_speed_rpm
-    bep = pump.bep_flow_lpm * speed_ratio
-    span = pump.efficiency_span_lpm * speed_ratio
-    if span <= 0.0:
+    reduced_flow_lpm = flow_lpm * pump.rated_speed_rpm / speed_rpm
+    x = reduced_flow_lpm / pump.bep_flow_lpm
+    if x >= 2.0:
         return 0.0
-    normalised = (flow_lpm - bep) / span
-    efficiency = pump.bep_efficiency * (1.0 - normalised**2)
-    return max(pump.minimum_efficiency, min(pump.bep_efficiency, efficiency))
+    return max(0.0, pump.bep_efficiency * (2.0 * x - x * x))
 
 
 def motor_current(electrical_power_w: float, motor: MotorParameters = MOTOR) -> float:
@@ -330,21 +346,36 @@ def npsh_available(flow_m3s: float, blockage: float = 0.0, circuit: HydraulicCir
     return (suction - FLUID.vapour_pressure) / (FLUID.density * FLUID.gravity)
 
 
-def npsh_required(flow_m3s: float, pump: PumpParameters = PUMP) -> float:
+def npsh_required(
+    flow_m3s: float, speed_rpm: float = PUMP.rated_speed_rpm, pump: PumpParameters = PUMP
+) -> float:
     """First-order NPSHr, rising with the square of flow.
 
-    Anchored so that NPSHr at the duty flow is a plausible 2.0 m for a pump of
-    this size. Marked clearly as a model, not a manufacturer curve.
+        NPSHr(Q, N) = (N/N_rated)^2 [ 0.6 + 1.4 (Q_reduced / Q_duty)^2 ]
+
+    Anchored so that NPSHr at the rated duty flow is a plausible 2.0 m for a
+    pump of this size, with a non-zero shutoff term because a real impeller
+    still requires some suction head at zero flow. Marked clearly as a model,
+    not a manufacturer curve.
+
+    Speed enters the same way it does for efficiency: NPSHr is a homologous
+    quantity, so it is evaluated at the reduced flow and scaled by N^2. Note
+    that once the reduced flow is substituted back, the quadratic term is
+    speed-invariant in absolute flow and only the shutoff term carries N^2.
     """
     duty = lpm_to_m3s(pump.duty_flow_lpm)
-    if duty <= 0:
+    if duty <= 0 or speed_rpm <= 0:
         return 0.0
-    return 2.0 * (flow_m3s / duty) ** 2
+    speed_ratio = speed_rpm / pump.rated_speed_rpm
+    reduced_ratio = (flow_m3s / speed_ratio) / duty
+    return speed_ratio**2 * (0.6 + 1.4 * reduced_ratio**2)
 
 
-def cavitation_margin(flow_m3s: float, blockage: float = 0.0) -> float:
+def cavitation_margin(
+    flow_m3s: float, blockage: float = 0.0, speed_rpm: float = PUMP.rated_speed_rpm
+) -> float:
     """NPSHa - NPSHr. Negative means cavitation is expected."""
-    return npsh_available(flow_m3s, blockage) - npsh_required(flow_m3s)
+    return npsh_available(flow_m3s, blockage) - npsh_required(flow_m3s, speed_rpm)
 
 
 # --------------------------------------------------------------------------

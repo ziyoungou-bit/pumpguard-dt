@@ -16,6 +16,7 @@ import {
   HEAD_COEFFICIENT,
   MOTOR,
   PUMP,
+  SPECIFIC_SPEED_NQ,
   bladePassFrequencyHz,
   lpmToM3s,
   npshAvailableM,
@@ -32,6 +33,11 @@ export function Engineering() {
   const flowM3s = lpmToM3s(telemetry.flow_lpm)
   const K = systemResistance(valveOpening)
   const speedRatio = telemetry.rpm / PUMP.rated_speed_rpm
+  // Reduced flow and its BEP ratio, shown explicitly so the efficiency formula
+  // on this page can be followed one substitution at a time.
+  const reducedFlowLpm =
+    telemetry.rpm > 0 ? (telemetry.flow_lpm * PUMP.rated_speed_rpm) / telemetry.rpm : 0
+  const x = reducedFlowLpm / PUMP.bep_flow_lpm
   const bearings = bearingDefectFrequencies({
     rolling_elements: BEARING.rolling_elements,
     ball_diameter_mm: BEARING.ball_diameter_mm,
@@ -92,13 +98,14 @@ export function Engineering() {
         <Card title="Efficiency and NPSH">
           <div className="space-y-3">
             <Formula
-              expression={`eta(Q) = eta_BEP [ 1 - ((Q - Q_BEP) / span)^2 ]\n     = ${PUMP.bep_efficiency} x [ 1 - ((${fmt(telemetry.flow_lpm, 2)} - ${PUMP.bep_flow_lpm}) / ${PUMP.efficiency_span_lpm})^2 ] = ${fmt(telemetry.pump_efficiency * 100, 2)} %`}
-              where="An inverted parabola about the best efficiency point -- the usual first-order shape."
+              expression={`Q_red = Q N_rated / N = ${fmt(telemetry.flow_lpm, 2)} x ${PUMP.rated_speed_rpm} / ${fmt(telemetry.rpm, 0)} = ${fmt(reducedFlowLpm, 2)} L/min\nx = Q_red / Q_BEP = ${fmt(reducedFlowLpm, 2)} / ${PUMP.bep_flow_lpm} = ${fmt(x, 4)}\neta(Q) = eta_BEP [ 2x - x^2 ] = ${PUMP.bep_efficiency} x [ 2(${fmt(x, 4)}) - ${fmt(x, 4)}^2 ] = ${fmt(telemetry.pump_efficiency * 100, 2)} %`}
+              where={`n_q = N sqrt(Q) / H^0.75 = ${fmt(SPECIFIC_SPEED_NQ, 2)} at the rated duty point, which is why eta_BEP is ${fmt(PUMP.bep_efficiency * 100, 0)} % and not the 60-70 % of a mid-n_q machine.`}
+              note="Efficiency is looked up on the REDUCED flow, not the absolute flow. Affinity laws map every point on the characteristic onto a homologous point at another speed with eta invariant, so what fixes efficiency is where the pump sits on its own curve -- and Q N_rated / N is exactly that coordinate. The parabola vanishes at Q = 0 and at 2 Q_BEP; it has no width parameter and no floor."
             />
             <Formula
-              expression={`NPSHa = (P_atm - P_vap)/(rho g) - z_lift - K_s Q^2 = ${fmt(npshAvailableM(flowM3s), 3)} m\nNPSHr = 0.6 + 1.4 (Q / Q_duty)^2 = ${fmt(npshRequiredM(telemetry.flow_lpm), 3)} m\nMargin = NPSHa - NPSHr = ${fmt(telemetry.npsh_margin_m, 3)} m`}
-              where={`P_atm = ${FLUID.atmospheric_pressure} Pa, P_vap = ${FLUID.vapour_pressure} Pa at 20 C, suction lift ${CIRCUIT.suction_lift_m} m.`}
-              note="A negative margin means vapour forms at the impeller eye and collapses in the volute. That is cavitation, and it removes metal."
+              expression={`NPSHa = (P_atm - P_vap)/(rho g) + z_s - K_s Q^2 = ${fmt(npshAvailableM(flowM3s), 3)} m\nNPSHr = (N/N_rated)^2 [ 0.6 + 1.4 (Q_red / Q_duty)^2 ] = ${fmt(npshRequiredM(telemetry.flow_lpm, telemetry.rpm), 3)} m\nMargin = NPSHa - NPSHr = ${fmt(telemetry.npsh_margin_m, 3)} m`}
+              where={`P_atm = ${FLUID.atmospheric_pressure} Pa, P_vap = ${FLUID.vapour_pressure} Pa at 20 C. z_s = -(suction_lift - reservoir_level) = -(${CIRCUIT.suction_lift_m} - ${CIRCUIT.reservoir_level_m}) = ${fmt(-(CIRCUIT.suction_lift_m - CIRCUIT.reservoir_level_m), 1)} m.`}
+              note="z_s is the NET static head at the flange: the pump stands 1.2 m above the reservoir floor but the liquid stands 0.8 m deep, so the lift actually seen is 0.4 m. NPSHr carries the (N/N_rated)^2 factor for the same reason efficiency carries the reduced flow -- it is a homologous quantity. A negative margin means vapour forms at the impeller eye and collapses in the volute. That is cavitation, and it removes metal."
             />
           </div>
         </Card>
