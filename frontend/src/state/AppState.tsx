@@ -35,6 +35,7 @@ import { AssetState, DataSource, FaultType } from '../types/contracts'
 import * as api from '../lib/api'
 import { realtimeSocketUrl } from '../lib/env'
 import { DEMO_FRAMES, DEMO_TICK_S, demoAlarms, demoDiagnosis, demoValveOpening } from '../data/recordedDemo'
+import { TICK_INTERVAL_S } from '../lib/pumpParameters.generated'
 import {
   applyCommand,
   commandBlockedReason,
@@ -49,7 +50,14 @@ export type ConnectionMode = 'live' | 'demo'
 export type DemoMode = 'replay' | 'interactive'
 
 const TICK_MS = DEMO_TICK_S * 1000
-const HISTORY_LIMIT = 3600 // 30 minutes at 0.5 s
+/**
+ * Frames kept in memory. The comment here used to say "30 minutes at 0.5 s",
+ * computed from a replay tick the backend never used -- at the real 0.2 s the
+ * same 3600 frames are 12 minutes. The window is now derived from the tick
+ * rather than asserted beside it, so it cannot be wrong again.
+ */
+const HISTORY_MINUTES = 30
+const HISTORY_LIMIT = Math.round((HISTORY_MINUTES * 60) / TICK_INTERVAL_S)
 const LIVE_TIMEOUT_MS = 4000
 const BACKOFF_BASE_MS = 1000
 /**

@@ -45,10 +45,23 @@ import type { Alarm, Diagnosis, Telemetry } from '../types/contracts'
 import { AssetState, DataSource, FaultType } from '../types/contracts'
 import { computeFrame } from '../lib/frameModel'
 import { ASSET_TAGS, THERMAL } from '../lib/pumpPhysics'
-import { ALARM_LIMITS, VIBRATION } from '../lib/pumpParameters.generated'
+import { ALARM_LIMITS, TICK_INTERVAL_S, VIBRATION } from '../lib/pumpParameters.generated'
 import { seededRandom } from '../lib/vibration'
 
-export const DEMO_TICK_S = 0.5
+/**
+ * Seconds between frames in the replay.
+ *
+ * Read from the backend's telemetry rate rather than chosen here. It was 0.5 s
+ * while the backend emitted at 5 Hz, so the two halves of the application
+ * disagreed by a factor of 2.5 about how fast the machine was being observed --
+ * and everything computed from it inherited the error, including the history
+ * buffer's claim to hold "30 minutes".
+ *
+ * The replay is now sampled at the same rate the live stream arrives at, so
+ * switching between LIVE and REPLAY does not change the time axis under the
+ * reader.
+ */
+export const DEMO_TICK_S = TICK_INTERVAL_S
 export const DEMO_DURATION_S = 90
 const DEMO_SEED = 20260813
 /**
@@ -101,7 +114,14 @@ function buildFrames(): Telemetry[] {
   let motorTempC: number = THERMAL.ambient_c
   let bearingTempC: number = THERMAL.ambient_c
 
-  for (let elapsed = 0; elapsed <= DEMO_DURATION_S; elapsed += DEMO_TICK_S) {
+  // Indexed on the frame number, not accumulated in seconds. 0.5 s was exact in
+  // binary and 0.2 s is not, so `elapsed += DEMO_TICK_S` drifted far enough over
+  // 450 frames that the final `elapsed <= DEMO_DURATION_S` test failed and the
+  // recording came out 0.2 s short. Multiplying an integer index is exact for
+  // any tick.
+  const frameCount = Math.round(DEMO_DURATION_S / DEMO_TICK_S)
+  for (let index = 0; index <= frameCount; index += 1) {
+    const elapsed = index * DEMO_TICK_S
     const { phase, severity, progress } = phaseAt(elapsed)
     // Speed ramps during STARTING so the digital twin visibly spins up.
     const rpm =
