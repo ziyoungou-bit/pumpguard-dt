@@ -347,19 +347,45 @@ def test_differential_pressure_matches_the_two_transmitters():
 
 
 def test_mechanical_faults_show_in_the_expected_vibration_order():
+    """Severity 0.9, not 1.0.
+
+    The vibration trip is now derived from ISO 20816-1's operational-limit rule
+    (1.25 x the zone C upper limit = 5.625 mm/s) rather than from a sourceless
+    18.0, and a fully developed imbalance takes this machine past it: severity
+    0.9 settles at 5.55 mm/s and runs, severity 1.0 trips. This test is about
+    WHERE the energy appears, so it is run at the highest severity the machine
+    survives; that the machine does not survive 1.0 is asserted separately
+    below, because it is protection working rather than a limitation.
+    """
     imbalance = started("imbalance")
-    imbalance.inject_fault(FaultType.IMBALANCE.value, 1.0, ramp_s=4.0)
+    imbalance.inject_fault(FaultType.IMBALANCE.value, 0.9, ramp_s=4.0)
     frames = run(imbalance, 40.0)
     healthy_1x = 0.55
+    assert frames[-1].asset_state == AssetState.RUNNING.value
     assert frames[-1].amplitude_1x_mm_s > 4.0 * healthy_1x
     assert frames[-1].amplitude_1x_mm_s > frames[-1].amplitude_2x_mm_s
 
     misalignment = started("misalignment")
-    misalignment.inject_fault(FaultType.MISALIGNMENT.value, 1.0, ramp_s=4.0)
+    misalignment.inject_fault(FaultType.MISALIGNMENT.value, 0.9, ramp_s=4.0)
     frames = run(misalignment, 40.0)
     # Misalignment lives at 2x and in the axial direction.
     assert frames[-1].amplitude_2x_mm_s > frames[-1].amplitude_1x_mm_s
     assert frames[-1].vibration_z_mm_s > 1.0
+
+
+def test_a_fully_developed_imbalance_trips_the_machine():
+    """The consequence of sourcing the trip threshold, asserted rather than met
+    by accident.
+
+    It used to be 18.0 mm/s, four times the zone C/D boundary and citable to
+    nothing, so no mechanical fault this simulator can produce ever reached it
+    and the interlock was decorative. At 1.25 x zone C the protection actually
+    protects.
+    """
+    session = started("imbalance-trip")
+    session.inject_fault(FaultType.IMBALANCE.value, 1.0, ramp_s=4.0)
+    run(session, 40.0)
+    assert session.state == AssetState.FAULT.value
 
 
 def test_injecting_an_unknown_fault_is_rejected():

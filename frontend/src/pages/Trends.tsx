@@ -8,6 +8,7 @@
  * y-axis, which invites a comparison that means nothing.
  */
 
+import { ALARM_LIMITS, VIBRATION } from '../lib/pumpParameters.generated'
 import { useMemo, useState } from 'react'
 import { useAppState } from '../state/AppState'
 import type { Telemetry } from '../types/contracts'
@@ -25,7 +26,7 @@ interface SignalSpec {
 
 /** Field keys are the contract's own names -- no renaming anywhere. */
 const SIGNALS: SignalSpec[] = [
-  { key: 'vibration_rms_mm_s', label: 'Vibration RMS', unit: 'mm/s', limit: 4.5 },
+  { key: 'vibration_rms_mm_s', label: 'Vibration RMS', unit: 'mm/s', limit: VIBRATION.zone_c_d_mm_s },
   { key: 'amplitude_1x_mm_s', label: '1x amplitude', unit: 'mm/s' },
   { key: 'amplitude_2x_mm_s', label: '2x amplitude', unit: 'mm/s' },
   { key: 'high_frequency_energy', label: 'HF band energy', unit: 'mm/s' },
@@ -33,8 +34,12 @@ const SIGNALS: SignalSpec[] = [
   { key: 'pump_head_m', label: 'Pump head', unit: 'm' },
   { key: 'differential_pressure_kpa', label: 'Differential pressure', unit: 'kPa' },
   { key: 'suction_pressure_kpa', label: 'Suction pressure', unit: 'kPa abs' },
-  { key: 'motor_current_a', label: 'Motor current', unit: 'A', limit: 1.09 },
+  { key: 'motor_current_a', label: 'Motor current', unit: 'A', limit: ALARM_LIMITS.motor_current_high.alarm },
+  // TODO(RECONCILE): shows 78, source says
+  // ALARM_LIMITS.motor_temperature_high.alarm = 75.
   { key: 'motor_temperature_c', label: 'Motor temperature', unit: 'degC', limit: 78 },
+  // TODO(RECONCILE): shows 62, source says
+  // ALARM_LIMITS.bearing_temperature_high.alarm = 65.
   { key: 'bearing_temperature_c', label: 'Bearing temperature', unit: 'degC', limit: 62 },
   { key: 'rpm', label: 'Speed', unit: 'rpm' },
   { key: 'pump_efficiency', label: 'Pump efficiency', unit: '-' },

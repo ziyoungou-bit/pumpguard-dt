@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..config.alarm_thresholds import ALARM_LIMITS
+from ..config.alarm_thresholds import ALARM_LIMITS, VIBRATION
 from ..config.pump_parameters import PUMP
 from ..contracts import Diagnosis, DiagnosisEvidence, FaultType, SensorQuality, Telemetry
 from ..physics import pump_model
@@ -84,8 +84,8 @@ NPSH_ERODED_M: float = 4.0
 
 #: ISO 20816-1 Class I band edges, used for the vibration term of the health
 #: index. Published values, unchanged.
-ISO_GOOD_MM_S: float = 1.8
-ISO_TRIP_MM_S: float = 11.2
+ISO_GOOD_MM_S: float = VIBRATION.zone_b_c_mm_s
+ISO_TRIP_MM_S: float = VIBRATION.trip_mm_s
 
 #: Confidence below which the classifier is not treated as making a claim, so a
 #: near-tie is not reported as a disagreement with the physics.
@@ -537,7 +537,8 @@ RECOMMENDED_ACTIONS: dict[str, list[str]] = {
         "Trend the 1x amplitude; an unbalance grows slowly and rarely needs an immediate stop.",
         "Inspect the impeller for deposits, erosion or a lost balance weight at the next shutdown.",
         "Check the coupling and shaft for a bent or loose element before balancing.",
-        "Balance the rotor in place if the 1x amplitude passes the ISO 20816-1 Class I 4.5 mm/s band edge.",
+        f"Balance the rotor in place if the 1x amplitude passes the ISO 20816-1 Class I "
+        f"{VIBRATION.zone_c_d_mm_s} mm/s band edge.",
     ],
     FaultType.MISALIGNMENT.value: [
         "Trend 2x and the axial channel; misalignment loads the bearings and the seal continuously.",

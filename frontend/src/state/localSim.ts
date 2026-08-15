@@ -203,6 +203,10 @@ export function tickLocalSim(
   // shows as TRIP actually trips the machine instead of just colouring a row.
   let nextState = asset_state
   if (asset_state === AssetState.RUNNING) {
+    // TODO(RECONCILE): trips at 95 C / 11 mm/s, source says
+    // ALARM_LIMITS.motor_temperature_high.trip = 90 and VIBRATION.trip_mm_s =
+    // 5.625. Lowering them changes when the browser model faults, which is
+    // behaviour on screen, so it converges in Step 3.
     if (frame.motor_temperature_c > 95 || frame.vibration_rms_mm_s > 11) {
       nextState = AssetState.FAULT
     }

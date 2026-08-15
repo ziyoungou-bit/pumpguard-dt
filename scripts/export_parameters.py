@@ -42,6 +42,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
+from app.config.alarm_thresholds import (  # noqa: E402
+    ALARM_LIMITS,
+    TEMPERATURE,
+    VIBRATION,
+)
 from app.config.pump_parameters import (  # noqa: E402
     ASSET,
     BEARING,
@@ -51,6 +56,7 @@ from app.config.pump_parameters import (  # noqa: E402
     PUMP,
     THERMAL,
 )
+from app.settings import DEFAULT_TELEMETRY_RATE_HZ  # noqa: E402
 
 OUTPUT_PATH = REPO_ROOT / "frontend" / "src" / "lib" / "pumpParameters.generated.ts"
 
@@ -132,6 +138,52 @@ def render() -> str:
         " * See PumpParameters.specific_speed_nq for why this number sets eta_BEP.\n"
         " */\n"
         f"export const SPECIFIC_SPEED_NQ = {PUMP.specific_speed_nq!r}"
+    )
+
+    # -- protection setpoints ------------------------------------------------
+    parts.append(
+        emit_object(
+            "VIBRATION",
+            VIBRATION,
+            # trip_mm_s is a property, not a field, so it is projected here
+            # rather than being recomputed on the far side. Deriving it twice
+            # is how the two halves start to disagree.
+            extra={"trip_mm_s": VIBRATION.trip_mm_s},
+        )
+    )
+    parts.append(emit_object("TEMPERATURE", TEMPERATURE))
+
+    limit_lines = [
+        "/**",
+        " * Alarm setpoints, keyed exactly as backend/app/config/alarm_thresholds.py",
+        " * names them. The UI must not restate a limit: every threshold it draws,",
+        " * colours or compares against comes from here.",
+        " */",
+        "export const ALARM_LIMITS = {",
+    ]
+    for limit in ALARM_LIMITS:
+        limit_lines.append(f"  {limit.key}: {{")
+        limit_lines.append(f"    tag: {_ts_value(limit.tag)},")
+        limit_lines.append(f"    unit: {_ts_value(limit.unit)},")
+        limit_lines.append(f"    direction: {_ts_value(limit.direction)},")
+        limit_lines.append(f"    warning: {_ts_value(limit.warning)},")
+        limit_lines.append(f"    alarm: {_ts_value(limit.alarm)},")
+        limit_lines.append(f"    trip: {_ts_value(limit.trip)},")
+        limit_lines.append(f"    deadband: {_ts_value(limit.deadband)},")
+        limit_lines.append("  },")
+    limit_lines.append("} as const")
+    parts.append("\n".join(limit_lines))
+
+    parts.append(
+        "/**\n"
+        " * Frames per second the backend emits, and the tick interval that follows.\n"
+        " * The browser-side replay used to carry a hardcoded 0.5 s, so the two\n"
+        " * halves disagreed about how fast the machine was being observed and\n"
+        " * every window computed from it -- including the history buffer's stated\n"
+        " * '30 minutes' -- was wrong by a factor of 2.5.\n"
+        " */\n"
+        f"export const TELEMETRY_RATE_HZ = {DEFAULT_TELEMETRY_RATE_HZ!r}\n"
+        f"export const TICK_INTERVAL_S = {1.0 / DEFAULT_TELEMETRY_RATE_HZ!r}"
     )
     return "\n\n".join(parts) + "\n"
 

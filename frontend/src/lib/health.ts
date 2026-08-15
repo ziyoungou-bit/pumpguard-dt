@@ -22,10 +22,17 @@
  */
 
 import { ZONE_A_B_MM_S, ZONE_B_C_MM_S, ZONE_C_D_MM_S, vibrationHealthPenalty } from './vibration'
+import { ALARM_LIMITS } from './pumpParameters.generated'
 
 /** Below this the suction margin is inside normal engineering practice. */
-export const NPSH_MARGIN_GUIDELINE_M = 0.5
-/** Bearing temperature above which grease life starts to be consumed fast. */
+export const NPSH_MARGIN_GUIDELINE_M = ALARM_LIMITS.npsh_margin_low.alarm
+/**
+ * Bearing temperature above which grease life starts to be consumed fast.
+ *
+ * TODO(RECONCILE): shows 62, source says
+ * ALARM_LIMITS.bearing_temperature_high.alarm = 65. Changing it moves the
+ * health index on every screen, so it converges in Step 3.
+ */
 export const BEARING_TEMPERATURE_LIMIT_C = 62
 /**
  * Efficiency is penalised below this FRACTION of the BEP efficiency, not below

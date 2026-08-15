@@ -13,6 +13,7 @@ import { assetStateStatus, healthStatus, limitStatus, severityStatus } from '../
 import { fmt, fmtPercent, fmtUnit, fmtClock, humanise } from '../lib/format'
 import { ASSET_TAGS, MOTOR } from '../lib/pumpPhysics'
 import { VIBRATION_BAND_LABEL, vibrationSeverityZone } from '../lib/vibration'
+import { ALARM_LIMITS, VIBRATION } from '../lib/pumpParameters.generated'
 import { Card, DefinitionRow, Meter, PageHeading, ProvenanceNote, StatTile, StatusBadge } from '../components/ui'
 import { TrendChart } from '../components/charts'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -162,9 +163,9 @@ export function Dashboard() {
             status={
               telemetry.npsh_margin_m < 0
                 ? { tone: 'alarm', label: 'CAVITATING', detail: 'NPSHa below NPSHr' }
-                : telemetry.npsh_margin_m < 0.5
-                  ? { tone: 'warn', label: 'LOW MARGIN', detail: 'Below 0.5 m' }
-                  : { tone: 'ok', label: 'ADEQUATE', detail: 'Above 0.5 m' }
+                : telemetry.npsh_margin_m < ALARM_LIMITS.npsh_margin_low.alarm
+                  ? { tone: 'warn', label: 'LOW MARGIN', detail: `Below ${ALARM_LIMITS.npsh_margin_low.alarm} m` }
+                  : { tone: 'ok', label: 'ADEQUATE', detail: `Above ${ALARM_LIMITS.npsh_margin_low.alarm} m` }
             }
           />
           <StatTile
@@ -172,6 +173,8 @@ export function Dashboard() {
             value={fmt(telemetry.motor_temperature_c, 1)}
             unit="degC"
             tag={ASSET_TAGS.motor_temperature}
+            // TODO(RECONCILE): shows 70/78, source says
+            // ALARM_LIMITS.motor_temperature_high.warning/alarm = 65/75.
             status={limitStatus(telemetry.motor_temperature_c, 70, 78)}
           />
           <StatTile
@@ -179,6 +182,8 @@ export function Dashboard() {
             value={fmt(telemetry.bearing_temperature_c, 1)}
             unit="degC"
             tag={ASSET_TAGS.bearing_temperature}
+            // TODO(RECONCILE): shows 55/62, source says
+            // ALARM_LIMITS.bearing_temperature_high.warning/alarm = 55/65.
             status={limitStatus(telemetry.bearing_temperature_c, 55, 62)}
           />
           <StatTile
@@ -186,7 +191,7 @@ export function Dashboard() {
             value={fmt(telemetry.vibration_rms_mm_s, 2)}
             unit="mm/s"
             tag={ASSET_TAGS.accelerometer}
-            status={limitStatus(telemetry.vibration_rms_mm_s, 1.8, 4.5)}
+            status={limitStatus(telemetry.vibration_rms_mm_s, VIBRATION.zone_b_c_mm_s, VIBRATION.zone_c_d_mm_s)}
             hint={`Zone ${zone.zone}: ${zone.label}`}
           />
           <StatTile
@@ -238,7 +243,7 @@ export function Dashboard() {
               dataKey="vibration_rms_mm_s"
               name="Vibration RMS"
               unit="mm/s"
-              warningLevel={4.5}
+              warningLevel={VIBRATION.zone_c_d_mm_s}
             />
           </Card>
         </ErrorBoundary>

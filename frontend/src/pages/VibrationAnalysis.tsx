@@ -13,6 +13,7 @@ import * as api from '../lib/api'
 import type { FftResponse, VibrationResponse } from '../types/contracts'
 import { BEARING, MOTOR, bladePassFrequencyHz } from '../lib/pumpPhysics'
 import { VIBRATION_GEOMETRY } from '../lib/frameModel'
+import { VIBRATION } from '../lib/pumpParameters.generated'
 import {
   VIBRATION_BAND_LABEL,
   VIBRATION_SCOPE_NOTE,
@@ -272,7 +273,7 @@ export function VibrationAnalysis() {
           value={fmt(telemetry.vibration_rms_mm_s, 2)}
           unit="mm/s"
           tag="ACC-101"
-          status={limitStatus(telemetry.vibration_rms_mm_s, 1.8, 4.5)}
+          status={limitStatus(telemetry.vibration_rms_mm_s, VIBRATION.zone_b_c_mm_s, VIBRATION.zone_c_d_mm_s)}
           hint={`${VIBRATION_BAND_LABEL}. Zone ${zone.zone}: ${zone.label}`}
         />
         <StatTile

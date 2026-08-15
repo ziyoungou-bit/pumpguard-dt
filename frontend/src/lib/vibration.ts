@@ -15,6 +15,7 @@
  */
 
 import { amplitudeSpectrum } from './fft'
+import { VIBRATION } from './pumpParameters.generated'
 
 export interface BearingGeometryInput {
   rolling_elements: number
@@ -387,12 +388,12 @@ export function synthesiseVibration(params: VibrationSynthesisParams): Synthetic
  * certification. Naming a standard that does not cover the machine would be
  * the kind of borrowed authority this project exists to avoid.
  */
-export const ZONE_A_B_MM_S = 0.71
-export const ZONE_B_C_MM_S = 1.8
-export const ZONE_C_D_MM_S = 4.5
+export const ZONE_A_B_MM_S = VIBRATION.zone_a_b_mm_s
+export const ZONE_B_C_MM_S = VIBRATION.zone_b_c_mm_s
+export const ZONE_C_D_MM_S = VIBRATION.zone_c_d_mm_s
 
 /** Frequency band every velocity RMS on this platform is measured over. */
-export const VIBRATION_BAND_LABEL = '10-1000 Hz'
+export const VIBRATION_BAND_LABEL = `${VIBRATION.band_low_hz}-${VIBRATION.band_high_hz} Hz`
 
 /**
  * The scope statement that must accompany the alarm bands anywhere they appear.

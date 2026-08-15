@@ -38,6 +38,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
+from ..config.alarm_thresholds import VIBRATION
 from ..config.pump_parameters import BEARING, PUMP
 from ..contracts import (
     SCHEMA_VERSION,
@@ -866,9 +867,9 @@ class MLGateway:
 # trust.
 
 #: ISO 20816-1 Class I band edges, mm/s RMS.
-_ISO_SATISFACTORY = 1.8
-_ISO_UNSATISFACTORY = 4.5
-_ISO_UNACCEPTABLE = 7.1
+_ISO_SATISFACTORY = VIBRATION.zone_b_c_mm_s
+_ISO_UNSATISFACTORY = VIBRATION.zone_c_d_mm_s
+_ISO_UNACCEPTABLE = VIBRATION.trip_mm_s
 #: NPSH margin below which cavitation is expected; 0 m is cavitation by definition.
 _NPSH_WARNING_M = 1.5
 #: Loss-of-load current. A dry-running pump unloads to about 0.42 A.
@@ -1051,7 +1052,7 @@ def _physics_health(telemetry: Telemetry) -> float:
     """
     deviations = [
         # Vibration against the ISO trip level.
-        (telemetry.vibration_rms_mm_s - _ISO_SATISFACTORY) / (11.2 - _ISO_SATISFACTORY),
+        (telemetry.vibration_rms_mm_s - _ISO_SATISFACTORY) / (_ISO_UNACCEPTABLE - _ISO_SATISFACTORY),
         # NPSH margin: zero margin is full deviation.
         (_NPSH_WARNING_M - telemetry.npsh_margin_m) / 3.0,
         # Bearing temperature against its trip.

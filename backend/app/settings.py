@@ -46,6 +46,14 @@ def _env(name: str, default: str) -> str:
     return value if value else default
 
 
+#: Frames per second the simulator emits, and therefore the tick interval
+#: (1 / rate = 0.2 s). Named rather than inline so it can be projected into the
+#: frontend: the browser-side replay used to carry its own hardcoded 0.5 s,
+#: which meant the two halves of the application disagreed about how fast the
+#: machine was being observed and every "window" computed from it was wrong.
+DEFAULT_TELEMETRY_RATE_HZ: float = 5.0
+
+
 def _env_float(name: str, default: float, minimum: float, maximum: float) -> float:
     """A malformed or absurd number falls back to the default rather than crashing.
 
@@ -147,7 +155,7 @@ def load_settings() -> Settings:
         port=_env_int("PORT", 8000, 1, 65535),
         # Above ~20 Hz the browser cannot paint the frames anyway and the
         # bandwidth is wasted; below 1 Hz the trend charts look like steps.
-        telemetry_rate_hz=_env_float("TELEMETRY_RATE_HZ", 5.0, 0.5, 20.0),
+        telemetry_rate_hz=_env_float("TELEMETRY_RATE_HZ", DEFAULT_TELEMETRY_RATE_HZ, 0.5, 20.0),
         session_idle_timeout_s=_env_float("SESSION_IDLE_TIMEOUT_S", 900.0, 10.0, 86_400.0),
         # Each session is one SimulationSession: a few hundred floats plus a
         # numpy RNG. 200 of them is a handful of megabytes, and the cap exists

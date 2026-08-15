@@ -37,7 +37,7 @@ import numpy as np
 from ..automation.alarms import AlarmManager
 from ..automation.interlocks import InterlockChain, ProcessSnapshot
 from ..automation.state_machine import Event, PumpStateMachine, TransitionResult
-from ..config.alarm_thresholds import ALARM_STARTUP_INHIBIT_S, INTERLOCKS
+from ..config.alarm_thresholds import ALARM_STARTUP_INHIBIT_S, INTERLOCKS, VIBRATION
 from ..config.pump_parameters import ASSET, FLUID, MOTOR, PUMP
 from ..contracts import Alarm, AssetState, DataSource, FaultType, Telemetry
 from ..physics import pump_model
@@ -455,7 +455,14 @@ class SimulationSession:
         margin against the alarm level -- so it is never obviously wrong on
         screen while the model is being trained.
         """
-        vibration_deviation = min(max((vibration_rms - 1.0) / (11.2 - 1.0), 0.0), 1.0)
+        vibration_deviation = min(
+            max(
+                (vibration_rms - VIBRATION.zone_b_c_mm_s)
+                / (VIBRATION.trip_mm_s - VIBRATION.zone_b_c_mm_s),
+                0.0,
+            ),
+            1.0,
+        )
         npsh_deviation = min(max((1.5 - npsh_margin) / 3.0, 0.0), 1.0)
         physical = max(vibration_deviation, npsh_deviation)
         anomaly = min(max(0.6 * severity + 0.4 * physical, 0.0), 1.0)

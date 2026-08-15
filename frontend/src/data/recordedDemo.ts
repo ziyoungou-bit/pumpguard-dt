@@ -44,7 +44,8 @@
 import type { Alarm, Diagnosis, Telemetry } from '../types/contracts'
 import { AssetState, DataSource, FaultType } from '../types/contracts'
 import { computeFrame } from '../lib/frameModel'
-import { ASSET_TAGS, MOTOR, THERMAL } from '../lib/pumpPhysics'
+import { ASSET_TAGS, THERMAL } from '../lib/pumpPhysics'
+import { ALARM_LIMITS, VIBRATION } from '../lib/pumpParameters.generated'
 import { seededRandom } from '../lib/vibration'
 
 export const DEMO_TICK_S = 0.5
@@ -267,7 +268,7 @@ export function demoDiagnosis(frame: Telemetry): Diagnosis {
       statement: `Vibration velocity RMS is ${frame.vibration_rms_mm_s.toFixed(2)} mm/s`,
       measured_value: frame.vibration_rms_mm_s,
       unit: 'mm/s',
-      reference: 'ISO 20816-1 Class I zone B/C boundary at 1.8 mm/s',
+      reference: `ISO 20816-1 Class I zone B/C boundary at ${VIBRATION.zone_b_c_mm_s} mm/s`,
     },
     {
       source: 'physics',
@@ -354,33 +355,36 @@ const ALARM_RULES: AlarmRule[] = [
     description: 'Vibration velocity RMS above ISO 20816-1 Class I zone C',
     severity: 'ALARM',
     unit: 'mm/s',
-    threshold: 4.5,
+    threshold: VIBRATION.zone_c_d_mm_s,
     read: (f) => f.vibration_rms_mm_s,
-    active: (f) => f.vibration_rms_mm_s > 4.5,
+    active: (f) => f.vibration_rms_mm_s > VIBRATION.zone_c_d_mm_s,
   },
   {
     tag: ASSET_TAGS.accelerometer,
     description: 'Vibration velocity RMS above ISO 20816-1 Class I zone B',
     severity: 'WARNING',
     unit: 'mm/s',
-    threshold: 1.8,
+    threshold: VIBRATION.zone_b_c_mm_s,
     read: (f) => f.vibration_rms_mm_s,
-    active: (f) => f.vibration_rms_mm_s > 1.8,
+    active: (f) => f.vibration_rms_mm_s > VIBRATION.zone_b_c_mm_s,
   },
   {
     tag: ASSET_TAGS.suction_pressure,
     description: 'NPSH margin low -- cavitation risk',
     severity: 'ALARM',
     unit: 'm',
-    threshold: 0.5,
+    threshold: ALARM_LIMITS.npsh_margin_low.alarm,
     read: (f) => f.npsh_margin_m,
-    active: (f) => f.npsh_margin_m < 0.5 && f.asset_state === AssetState.RUNNING,
+    active: (f) =>
+      f.npsh_margin_m < ALARM_LIMITS.npsh_margin_low.alarm && f.asset_state === AssetState.RUNNING,
   },
   {
     tag: ASSET_TAGS.bearing_temperature,
     description: 'Bearing temperature high',
     severity: 'WARNING',
     unit: 'degC',
+    // TODO(RECONCILE): shows 62, source says
+    // ALARM_LIMITS.bearing_temperature_high.alarm = 65.
     threshold: 62,
     read: (f) => f.bearing_temperature_c,
     active: (f) => f.bearing_temperature_c > 62,
@@ -390,6 +394,8 @@ const ALARM_RULES: AlarmRule[] = [
     description: 'Motor winding temperature high',
     severity: 'ALARM',
     unit: 'degC',
+    // TODO(RECONCILE): shows 78, source says
+    // ALARM_LIMITS.motor_temperature_high.alarm = 75.
     threshold: 78,
     read: (f) => f.motor_temperature_c,
     active: (f) => f.motor_temperature_c > 78,
@@ -399,6 +405,8 @@ const ALARM_RULES: AlarmRule[] = [
     description: 'Flow below minimum continuous stable flow',
     severity: 'WARNING',
     unit: 'L/min',
+    // TODO(RECONCILE): shows 8, source says
+    // ALARM_LIMITS.flow_low.warning = 14.
     threshold: 8,
     read: (f) => f.flow_lpm,
     active: (f) => f.asset_state === AssetState.RUNNING && f.flow_lpm < 8,
@@ -408,9 +416,9 @@ const ALARM_RULES: AlarmRule[] = [
     description: 'Motor current above service factor',
     severity: 'TRIP',
     unit: 'A',
-    threshold: Number((MOTOR.rated_current_a * 1.15).toFixed(2)),
+    threshold: ALARM_LIMITS.motor_current_high.alarm,
     read: (f) => f.motor_current_a,
-    active: (f) => f.motor_current_a > MOTOR.rated_current_a * 1.15,
+    active: (f) => f.motor_current_a > ALARM_LIMITS.motor_current_high.alarm,
   },
   {
     tag: ASSET_TAGS.speed,

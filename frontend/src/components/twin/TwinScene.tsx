@@ -13,6 +13,7 @@
  *     indication, not a thermal image.
  */
 
+import { VIBRATION } from '../../lib/pumpParameters.generated'
 import { useMemo, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Html, OrbitControls } from '@react-three/drei'
@@ -42,7 +43,7 @@ export const SENSOR_MARKERS: SensorMarkerSpec[] = [
     position: [-0.02, 0.62, 0.2],
     unit: 'mm/s',
     read: (t) => t.vibration_rms_mm_s,
-    alarmLimit: 4.5,
+    alarmLimit: VIBRATION.zone_c_d_mm_s,
     digits: 2,
   },
   {

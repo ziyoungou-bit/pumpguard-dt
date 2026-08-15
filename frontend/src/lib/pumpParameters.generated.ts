@@ -107,3 +107,121 @@ export const HEAD_COEFFICIENT = 36000000.0
  * See PumpParameters.specific_speed_nq for why this number sets eta_BEP.
  */
 export const SPECIFIC_SPEED_NQ = 5.565316716512929
+
+export const VIBRATION = {
+  zone_a_b_mm_s: 0.71,
+  zone_b_c_mm_s: 1.8,
+  zone_c_d_mm_s: 4.5,
+  trip_factor_of_zone_c: 1.25,
+  band_low_hz: 10.0,
+  band_high_hz: 1000.0,
+  trip_mm_s: 5.625,
+} as const
+
+export const TEMPERATURE = {
+  motor_warning_c: 65.0,
+  motor_alarm_c: 75.0,
+  motor_trip_c: 90.0,
+  bearing_warning_c: 55.0,
+  bearing_alarm_c: 65.0,
+  bearing_trip_c: 80.0,
+} as const
+
+/**
+ * Alarm setpoints, keyed exactly as backend/app/config/alarm_thresholds.py
+ * names them. The UI must not restate a limit: every threshold it draws,
+ * colours or compares against comes from here.
+ */
+export const ALARM_LIMITS = {
+  flow_low: {
+    tag: 'FT-101',
+    unit: 'L/min',
+    direction: 'low',
+    warning: 14.0,
+    alarm: 9.0,
+    trip: 4.0,
+    deadband: 1.0,
+  },
+  suction_pressure_low: {
+    tag: 'PT-101',
+    unit: 'kPa',
+    direction: 'low',
+    warning: 70.0,
+    alarm: 55.0,
+    trip: 40.0,
+    deadband: 3.0,
+  },
+  discharge_pressure_high: {
+    tag: 'PT-102',
+    unit: 'kPa',
+    direction: 'high',
+    warning: 215.0,
+    alarm: 235.0,
+    trip: 260.0,
+    deadband: 4.0,
+  },
+  motor_current_high: {
+    tag: 'CT-101',
+    unit: 'A',
+    direction: 'high',
+    warning: 0.95,
+    alarm: 1.09,
+    trip: 1.3,
+    deadband: 0.03,
+  },
+  motor_current_low: {
+    tag: 'CT-101',
+    unit: 'A',
+    direction: 'low',
+    warning: 0.46,
+    alarm: 0.44,
+    trip: 0.43,
+    deadband: 0.02,
+  },
+  motor_temperature_high: {
+    tag: 'TT-101',
+    unit: 'C',
+    direction: 'high',
+    warning: 65.0,
+    alarm: 75.0,
+    trip: 90.0,
+    deadband: 2.0,
+  },
+  bearing_temperature_high: {
+    tag: 'TT-102',
+    unit: 'C',
+    direction: 'high',
+    warning: 55.0,
+    alarm: 65.0,
+    trip: 80.0,
+    deadband: 2.0,
+  },
+  vibration_high: {
+    tag: 'ACC-101',
+    unit: 'mm/s',
+    direction: 'high',
+    warning: 1.8,
+    alarm: 4.5,
+    trip: 5.625,
+    deadband: 0.4,
+  },
+  npsh_margin_low: {
+    tag: 'P-101',
+    unit: 'm',
+    direction: 'low',
+    warning: 1.5,
+    alarm: 0.5,
+    trip: -0.5,
+    deadband: 0.3,
+  },
+} as const
+
+/**
+ * Frames per second the backend emits, and the tick interval that follows.
+ * The browser-side replay used to carry a hardcoded 0.5 s, so the two
+ * halves disagreed about how fast the machine was being observed and
+ * every window computed from it -- including the history buffer's stated
+ * '30 minutes' -- was wrong by a factor of 2.5.
+ */
+export const TELEMETRY_RATE_HZ = 5.0
+export const TICK_INTERVAL_S = 0.2

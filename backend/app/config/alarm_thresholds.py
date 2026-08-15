@@ -10,18 +10,16 @@ fully open), which is the reference a commissioning engineer would use:
     flow            21.0 L/min        suction pressure    92.0 kPa a
     head            7.59 m            discharge pressure 166.3 kPa a
     efficiency      41.9 %            current             0.671 A
-    NPSH margin     7.02 m            vibration RMS      ~0.75 mm/s
-    motor temp      ~58 C steady      bearing temp       ~46 C steady
+    NPSH margin     7.02 m            vibration RMS      ~0.80 mm/s
+    motor temp      ~48 C steady      bearing temp       ~40 C steady
 
-Those last two rows moved a long way when the peak efficiency was corrected
-from 62 % to 42 % on the specific-speed argument in pump_parameters.py. Shaft
-power at duty rose from 51 W to 71 W, so the motor now sits at about 82 % of
-its 120 W rating instead of 59 %, and the steady winding temperature rose with
-it. The 65 C warning limit below therefore has roughly 7 C of headroom rather
-than 24 C. That is thin but genuine: it is what this motor does at this duty,
-and the previous comfortable margin was an artefact of understated shaft power,
-not of a well-chosen motor. Resizing the motor is a design decision, not a
-threshold decision, so the limits are left where the insulation class puts them.
+Those last two rows moved when the peak efficiency was corrected from 62 % to
+42 % on the specific-speed argument in pump_parameters.py. Shaft power at duty
+rose from 51 W to 71 W, so the motor sits at about 59 % of its 120 W rating
+instead of 43 %, and the steady winding temperature rose with it. The 65 C
+warning has roughly 17 C of headroom. Load fraction here is SHAFT power over
+the rating -- a motor's rated power is its shaft output, so dividing electrical
+input by it would double-count the motor's own losses and read 82 %.
 
 The rule applied throughout: the nearest limit sits at least ten healthy
 standard deviations, and a visible engineering margin, away from the duty
@@ -70,6 +68,92 @@ class AlarmLimit:
     trip: float
     deadband: float
     critical: float | None = None
+
+
+@dataclass(frozen=True)
+class VibrationSeverityBands:
+    """ISO 20816-1 Class I zone boundaries, and the operational limits derived
+    from them.
+
+    Class I is machines up to 15 kW on rigid supports. The three boundaries are
+    the published ones and are used unchanged:
+
+        A/B  0.71 mm/s   newly commissioned
+        B/C  1.8  mm/s   unrestricted long-term operation
+        C/D  4.5  mm/s   restricted operation; above this, damage may occur
+
+    TRIP is not a fourth boundary -- the standard does not define one, because
+    zone D is open-ended. It comes instead from ISO 20816-1's guidance on
+    setting operational limits, which recommends that the TRIP value does not
+    exceed 1.25 times the upper limit of zone C. So it is DERIVED here rather
+    than written down: 1.25 x 4.5 = 5.625 mm/s.
+
+    That replaces an `extreme_vibration_mm_s = 18.0` which appeared in exactly
+    one place, was four times the zone C/D boundary, and had no source at all.
+    A number with no provenance is not a conservative limit, it is an unexamined
+    one.
+
+    SCOPE, unchanged and deliberate: at ~51 W shaft power this asset is below
+    the scope of ISO 20816-3 (>15 kW) and ISO 20816-7 (rotodynamic pumps). The
+    boundaries are correct and are applied BY ANALOGY, not by certification.
+    """
+
+    zone_a_b_mm_s: float = 0.71
+    zone_b_c_mm_s: float = 1.8
+    zone_c_d_mm_s: float = 4.5
+
+    #: ISO 20816-1: TRIP should not exceed this multiple of the zone C limit.
+    trip_factor_of_zone_c: float = 1.25
+
+    #: Every velocity RMS on this platform is measured over this band.
+    band_low_hz: float = 10.0
+    band_high_hz: float = 1000.0
+
+    @property
+    def trip_mm_s(self) -> float:
+        """Derived, never typed in. See the class docstring for the citation."""
+        return self.trip_factor_of_zone_c * self.zone_c_d_mm_s
+
+
+@dataclass(frozen=True)
+class TemperatureLimits:
+    """One warning and one alarm per measurement point, with the basis stated.
+
+    These were previously four different opinions each: the backend warned on
+    the motor at 65 C, the dashboard coloured its tile at 70, the demo alarm
+    fired at 78 and the trend line was drawn at 78. The values below are the
+    backend's, nominated as the single source; the divergent UI sites are marked
+    TODO(RECONCILE) and converge in Step 3.
+
+    Motor winding
+        Steady duty is about 48 C at this rig's 23 C ambient. Warning at 65 C is
+        the duty value plus a visible margin, which is the commissioning
+        practice this whole module follows -- limits placed against a verified
+        healthy point rather than against a catalogue. The TRIP is the one
+        anchored externally: IEC 60034-1 insulation Class B permits a 130 C
+        hot spot, and 90 C at a winding-embedded detector leaves 40 K for the
+        hot-spot gradient and for sensor placement.
+
+    Bearing
+        Steady duty is about 40 C. Warning at 55 C on the same basis. The TRIP
+        at 80 C comes from grease life rather than from metal: mineral-oil
+        lithium grease loses roughly half its life for every 15 K above 70 C
+        (the standard rolling-bearing rule, e.g. SKF's grease-life diagram), so
+        sustained operation above 80 C is a maintenance decision, not a normal
+        condition.
+    """
+
+    motor_warning_c: float = 65.0
+    motor_alarm_c: float = 75.0
+    motor_trip_c: float = 90.0
+
+    bearing_warning_c: float = 55.0
+    bearing_alarm_c: float = 65.0
+    bearing_trip_c: float = 80.0
+
+
+VIBRATION = VibrationSeverityBands()
+TEMPERATURE = TemperatureLimits()
 
 
 ALARM_LIMITS: tuple[AlarmLimit, ...] = (
@@ -145,11 +229,10 @@ ALARM_LIMITS: tuple[AlarmLimit, ...] = (
         description="High motor winding temperature",
         unit="C",
         direction="high",
-        # Steady duty ~41 C. Class B insulation tolerates 130 C hot spot;
-        # 90 C at the winding sensor is a conservative trip for this rig.
-        warning=65.0,
-        alarm=75.0,
-        trip=90.0,
+        # Basis in TemperatureLimits.
+        warning=TEMPERATURE.motor_warning_c,
+        alarm=TEMPERATURE.motor_alarm_c,
+        trip=TEMPERATURE.motor_trip_c,
         deadband=2.0,
     ),
     AlarmLimit(
@@ -158,29 +241,33 @@ ALARM_LIMITS: tuple[AlarmLimit, ...] = (
         description="High bearing temperature",
         unit="C",
         direction="high",
-        # Steady duty ~35 C. Grease life halves every 15 C above 70 C.
-        warning=55.0,
-        alarm=65.0,
-        trip=80.0,
+        # Basis in TemperatureLimits.
+        warning=TEMPERATURE.bearing_warning_c,
+        alarm=TEMPERATURE.bearing_alarm_c,
+        trip=TEMPERATURE.bearing_trip_c,
         deadband=2.0,
     ),
     AlarmLimit(
         key="vibration_high",
         tag=ASSET.accelerometer,
-        description="High vibration (ISO 20816-1 Class I band edges, 10-1000 Hz)",
+        description=(
+            f"High vibration (ISO 20816-1 Class I band edges, "
+            f"{VIBRATION.band_low_hz:.0f}-{VIBRATION.band_high_hz:.0f} Hz)"
+        ),
         unit="mm/s",
         direction="high",
         # Escalation mapped onto the zone edges rather than sitting inside one
         # of them. Warning at the B/C edge is the point the standard calls the
         # end of unrestricted long-term operation; alarm at C/D is where damage
-        # becomes possible. The warning previously sat at 4.5 -- the C/D edge --
-        # so the first thing an operator heard about a deteriorating machine was
-        # that it had already reached the band named "damage may occur", and the
-        # whole of Zone C passed silently.
-        warning=1.8,
-        alarm=4.5,
-        trip=7.1,
-        critical=11.2,
+        # becomes possible.
+        #
+        # There is no CRITICAL step. It used to be 11.2 mm/s, which is not a
+        # boundary in any standard -- zone D is open-ended, so a fourth level
+        # would have had to be invented. TRIP is derived from ISO 20816-1's
+        # operational-limit rule instead; see VibrationSeverityBands.
+        warning=VIBRATION.zone_b_c_mm_s,
+        alarm=VIBRATION.zone_c_d_mm_s,
+        trip=VIBRATION.trip_mm_s,
         deadband=0.4,
     ),
     AlarmLimit(
@@ -236,11 +323,13 @@ class InterlockSettings:
     #: A start that never reaches speed is a mechanical problem.
     start_timeout_s: float = 15.0
 
-    high_motor_temperature_c: float = 90.0
-    high_bearing_temperature_c: float = 80.0
+    high_motor_temperature_c: float = TEMPERATURE.motor_trip_c
+    high_bearing_temperature_c: float = TEMPERATURE.bearing_trip_c
 
-    #: Beyond ISO 20816-1 Class I "unacceptable" by a factor of ~1.6.
-    extreme_vibration_mm_s: float = 18.0
+    #: ISO 20816-1's own operational-limit rule: TRIP should not exceed 1.25
+    #: times the upper limit of zone C. Derived, so it cannot drift from the
+    #: bands. Replaces a hardcoded 18.0 which had no source at all.
+    extreme_vibration_mm_s: float = VIBRATION.trip_mm_s
     vibration_delay_s: float = 2.0
 
     #: How long a critical sensor may be dead before the machine is stopped.
