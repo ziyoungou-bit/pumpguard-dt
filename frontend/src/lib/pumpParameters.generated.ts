@@ -127,6 +127,24 @@ export const TEMPERATURE = {
   bearing_trip_c: 80.0,
 } as const
 
+export const ACQUISITION_BLOCK = {
+  name: 'acquisition',
+  sampling_rate_hz: 5120.0,
+  block_size: 4096,
+  purpose: 'feature extraction and ML input; 1.25 Hz resolution',
+  resolution_hz: 1.25,
+  duration_s: 0.8,
+} as const
+
+export const DISPLAY_BLOCK = {
+  name: 'display',
+  sampling_rate_hz: 2560.0,
+  block_size: 8192,
+  purpose: 'browser-side spectrum; 0.3125 Hz resolution, separates 2x from line frequency',
+  resolution_hz: 0.3125,
+  duration_s: 3.2,
+} as const
+
 /**
  * Alarm setpoints, keyed exactly as backend/app/config/alarm_thresholds.py
  * names them. The UI must not restate a limit: every threshold it draws,

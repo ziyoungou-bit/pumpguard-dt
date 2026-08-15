@@ -72,6 +72,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import signal as scipy_signal
 
+from ..config.alarm_thresholds import ACQUISITION
 from ..config.pump_parameters import BEARING, PUMP, BearingGeometry, PumpParameters
 from ..contracts import FaultType
 from .bearing import defect_frequencies
@@ -85,8 +86,8 @@ from .bearing import defect_frequencies
 class SamplingConfig:
     """One acquisition block. See the module docstring for why these values."""
 
-    sampling_rate_hz: float = 5120.0
-    block_size: int = 4096
+    sampling_rate_hz: float = ACQUISITION.sampling_rate_hz
+    block_size: int = ACQUISITION.block_size
 
     @property
     def nyquist_hz(self) -> float:

@@ -152,6 +152,62 @@ class TemperatureLimits:
     bearing_trip_c: float = 80.0
 
 
+@dataclass(frozen=True)
+class VibrationBlock:
+    """One named vibration acquisition configuration.
+
+    There are two of these, and they are deliberately different. Naming both
+    here is the alternative to an exemption list: a difference that can be given
+    a name and a reason is not a magic number, and a difference that cannot be
+    named was never deliberate and should be removed instead of suppressed.
+
+    Resolution is fs / N and nothing improves it -- zero padding interpolates,
+    it does not resolve.
+    """
+
+    name: str
+    sampling_rate_hz: float
+    block_size: int
+    purpose: str
+
+    @property
+    def resolution_hz(self) -> float:
+        return self.sampling_rate_hz / self.block_size
+
+    @property
+    def duration_s(self) -> float:
+        return self.block_size / self.sampling_rate_hz
+
+
+#: The acquisition the backend measures features from, and the one the ML
+#: model was trained against. 5120 Hz is 2.56 x a 2000 Hz analysis range, the
+#: standard condition-monitoring choice with the usual anti-alias margin;
+#: 4096 samples is 0.8 s at 1.25 Hz resolution, which separates 1x, 2x, 3x and
+#: the 145 Hz vane pass comfortably. Changing either shifts every ML feature
+#: and obliges a retrain, which is why it is not simply raised to match the
+#: display block below.
+ACQUISITION = VibrationBlock(
+    name="acquisition",
+    sampling_rate_hz=5120.0,
+    block_size=4096,
+    purpose="feature extraction and ML input; 1.25 Hz resolution",
+)
+
+#: The acquisition the browser synthesises for the Vibration page. Longer and
+#: slower: 2560 Hz over 8192 samples is 3.2 s at 0.3125 Hz. The resolution is
+#: the whole reason it differs. The most confusable pair on this machine is 2x
+#: mechanical at 48.33 Hz against line frequency at 50.0 Hz -- 1.67 Hz apart,
+#: which is 5.3 bins here and separable, but only 1.33 bins in ACQUISITION and
+#: not separable at all. Mistaking one for the other is the difference between
+#: "the rotor is unbalanced" and "the motor has an electrical asymmetry".
+DISPLAY_BLOCK = VibrationBlock(
+    name="display",
+    sampling_rate_hz=2560.0,
+    block_size=8192,
+    purpose="browser-side spectrum; 0.3125 Hz resolution, separates 2x from line frequency",
+)
+
+
 VIBRATION = VibrationSeverityBands()
 TEMPERATURE = TemperatureLimits()
 

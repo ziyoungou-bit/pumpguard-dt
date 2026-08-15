@@ -15,7 +15,7 @@
  */
 
 import { amplitudeSpectrum } from './fft'
-import { VIBRATION } from './pumpParameters.generated'
+import { DISPLAY_BLOCK, VIBRATION } from './pumpParameters.generated'
 
 export interface BearingGeometryInput {
   rolling_elements: number
@@ -134,8 +134,8 @@ export interface SyntheticVibration {
  * "the rotor is unbalanced" and "the motor has an electrical asymmetry", so the
  * block is sized to tell them apart rather than to be cheap.
  */
-export const VIBRATION_SAMPLE_RATE_HZ = 2560
-export const VIBRATION_BLOCK_SIZE = 8192
+export const VIBRATION_SAMPLE_RATE_HZ = DISPLAY_BLOCK.sampling_rate_hz
+export const VIBRATION_BLOCK_SIZE = DISPLAY_BLOCK.block_size
 
 /** Seconds of waveform drawn on the chart. Plotting 8192 points is pointless. */
 const WAVEFORM_DISPLAY_S = 0.25

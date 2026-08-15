@@ -43,7 +43,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from app.config.alarm_thresholds import (  # noqa: E402
+    ACQUISITION,
     ALARM_LIMITS,
+    DISPLAY_BLOCK,
     TEMPERATURE,
     VIBRATION,
 )
@@ -152,6 +154,21 @@ def render() -> str:
         )
     )
     parts.append(emit_object("TEMPERATURE", TEMPERATURE))
+
+    # Two named acquisitions, deliberately different. Both are projected, with
+    # their resolutions computed here, so the difference is a named fact rather
+    # than a pair of unexplained literals on opposite sides of the boundary.
+    for name, block in (("ACQUISITION_BLOCK", ACQUISITION), ("DISPLAY_BLOCK", DISPLAY_BLOCK)):
+        parts.append(
+            emit_object(
+                name,
+                block,
+                extra={
+                    "resolution_hz": block.resolution_hz,
+                    "duration_s": block.duration_s,
+                },
+            )
+        )
 
     limit_lines = [
         "/**",
