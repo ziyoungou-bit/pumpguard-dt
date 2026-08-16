@@ -173,6 +173,52 @@ def _frame(session: Session) -> Telemetry:
 # --------------------------------------------------------------------------
 
 
+def _process_memory() -> dict[str, Any]:
+    """Resident set size and the container's memory ceiling, both MiB.
+
+    Diagnostic, added to answer one question: the first /api/vibration call on
+    the deployed instance takes 30-45 s while every later call takes 0.3 s, and
+    scipy is imported at startup rather than lazily, so the cost is not import.
+    The remaining candidates are page eviction under memory pressure and CPU
+    throttling, and RSS against the cgroup limit distinguishes them.
+
+    Read from /proc rather than psutil: it is one file, it needs no dependency,
+    and this is a diagnostic that should not change the image it measures.
+    Returns nulls off Linux, which is where this runs in development.
+    """
+    def _read_first_int(path: str, key: str | None = None) -> int | None:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                if key is None:
+                    return int(handle.read().strip())
+                for line in handle:
+                    if line.startswith(key):
+                        return int(line.split()[1])
+        except (OSError, ValueError):
+            return None
+        return None
+
+    rss_kb = _read_first_int("/proc/self/status", "VmRSS:")
+    peak_kb = _read_first_int("/proc/self/status", "VmHWM:")
+    # cgroup v2 first, then v1. Both report bytes; v2 uses "max" for unlimited.
+    limit_bytes: int | None = None
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                raw = handle.read().strip()
+            limit_bytes = None if raw == "max" else int(raw)
+            break
+        except (OSError, ValueError):
+            continue
+
+    mib = lambda kb: None if kb is None else round(kb / 1024, 1)  # noqa: E731
+    return {
+        "rss_mib": mib(rss_kb),
+        "peak_rss_mib": mib(peak_kb),
+        "limit_mib": None if limit_bytes is None else round(limit_bytes / 1048576, 1),
+    }
+
+
 @router.get("/api/health")
 def health(request: Request) -> dict[str, Any]:
     """Liveness plus the three things that can be degraded independently.
@@ -204,6 +250,7 @@ def health(request: Request) -> dict[str, Any]:
         "version": SERVICE_VERSION,
         "schema_version": SCHEMA_VERSION,
         "environment": settings.app_env,
+        "process": _process_memory(),
         "simulation_engine": {
             "running": bool(getattr(request.app.state, "ticker_running", False)),
             "data_source": settings.data_source.value,
