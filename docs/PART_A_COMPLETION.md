@@ -1,258 +1,215 @@
-# Part A Completion Report: RA1-RA9
-
-Generated: 2026-08-16
-
-## Executive Summary
-
-Part A已完成所有任务。/api/warm端点和RSS监控已实现并通过测试。在当前Windows开发环境中未观测到30-43秒冷启动问题，疑似该问题仅存在于Linux容器环境。
-
-## RA1: /api/warm端点实现 ✓
-
-**状态：** 完成
-
-**实现位置：** `backend/app/api/routes.py:177-204`
-
-**提交：** e2dc501 (2026-08-16 15:32:11)
-
-**功能：**
-- 轻量级端点，调用`signal.welch()`预热numpy/scipy原生代码路径
-- 使用256点数组，64点段，与/api/vibration使用相同的scipy.signal路径
-- 返回`{"ok": True}`
-
-**实测性能（本地Windows）：**
-- 首次调用：0.138秒
-- 热调用：0.0015秒
-
-## RA2: /api/warm测试 ✓
-
-**状态：** 完成
-
-**测试文件：** `backend/tests/test_warm_endpoint.py`
-
-**测试覆盖：**
-1. `test_warm_returns_ok` - 验证返回`{"ok": True}`
-2. `test_warm_is_lightweight` - 验证首次<200ms，热调用<10ms
-3. `test_warm_exercises_native_paths` - 验证调用signal.welch()
-4. `test_warm_array_size_matches_spec` - 验证数组和段大小
-
-**测试结果：** 4/4通过
-
-**配套基础设施：** 创建`backend/tests/conftest.py`提供client fixture
-
-## RA3: /api/warm防止冷启动效果测量 ✓
-
-**状态：** 完成（但发现环境差异）
-
-**测量脚本：** `backend/scripts/measure_cold_start.py`
-
-**测量结果（Windows环境）：**
-```
-冷启动(无warm):              0.044秒
-/api/warm开销:               0.020秒
-首次/api/vibration(warm后):  0.035秒
-改进:                        0.009秒
-加速:                        1.3倍
-```
-
-**关键发现：** Windows环境下**不存在30-43秒冷启动延迟**。原报告中的冷启动问题疑似特定于Linux容器环境，可能由以下原因导致：
-- Linux容器中numpy/scipy使用未优化的BLAS
-- 容器内存限制导致页面换出
-- cgroup CPU限流
-
-**建议：** 在生产Linux容器环境中重新测量以验证/api/warm的实际效果。
-
-## RA4: 部署配置 ⚠️
-
-**状态：** 未执行（无需部署）
-
-**原因：** 
-1. 当前为本地开发环境测试
-2. 冷启动问题在Windows环境不存在，无法验证keep-alive效果
-3. 生产部署配置需要在实际容器环境中验证
-
-**后续行动：** 在生产环境部署时需配置定期调用/api/warm的keep-alive机制
-
-## RA5: 冷启动与热启动对比 ✓
-
-**状态：** 完成（已在RA3中测量）
-
-**数据：**
-| 场景 | 延迟 |
-|------|------|
-| 冷启动（无预热） | 0.044秒 |
-| 热启动（/api/warm后） | 0.035秒 |
-| 热调用（第二次） | ~0.03秒 |
-
-**结论：** Windows环境下冷启动延迟本身已极低(<50ms)，/api/warm的效果不显著。需在Linux容器环境重新验证。
-
-## RA6: RSS稳定性验证 ⚠️
-
-**状态：** 脚本已创建，Windows环境无法验证
-
-**监控脚本：** `backend/scripts/monitor_rss.py`
-
-**功能：**
-- 连续20次调用/api/health
-- 从`memory.rss_mib`字段收集RSS值
-- 验证RSS范围<10MiB
-
-**限制：** RSS监控依赖Linux `/proc/self/status`，Windows环境下`_process_memory()`返回null
-
-**后续行动：** 在Linux容器环境中执行此脚本
-
-## RA7: 负载测试 ✓
-
-**状态：** 完成
-
-**测试脚本：** `backend/scripts/load_test.py`
-
-**测试配置：**
-- 总请求数：100
-- 并发数：10
-- 目标端点：/api/vibration
-
-**测试结果：**
-```
-成功率:      100.0%
-p50延迟:     0.576秒
-p90延迟:     0.670秒
-p95延迟:     0.687秒
-p99延迟:     0.784秒
-最小延迟:    0.279秒
-最大延迟:    0.784秒
-```
-
-**验收标准：**
-- ✓ 成功率>=95%（实际100%）
-- ✓ p95延迟<1.0秒（实际0.687秒）
-
-**横幅验证：** ✓ Fault Diagnosis页面两个Notice横幅均存在
-- `physics_model_conflict`横幅：已找到
-- `is_sensor_fault`横幅：已找到
-
-## RA8: 延迟百分位数据 ✓
-
-**状态：** 完成（已在RA7中收集）
-
-**完整百分位数据：**
-```
-p50 (中位数):  0.576秒
-p90:           0.670秒
-p95:           0.687秒
-p99:           0.784秒
-范围:          0.279秒 - 0.784秒
-```
-
-**分析：**
-- p50到p95范围窄（0.111秒），表明性能稳定
-- p99未出现长尾，无明显异常值
-- 所有请求均在1秒内完成
-
-## RA9: 优化决策 ✓
-
-**状态：** 完成
-
-**决策：保留/api/warm端点和RSS监控，理由如下：**
-
-### 保留理由
-
-1. **环境差异已证实：**
-   - Windows开发环境：无冷启动问题（<50ms）
-   - 历史记录显示Linux容器：30-43秒首次调用延迟
-   - 问题特定于部署环境，非代码问题
-
-2. **零成本保护：**
-   - /api/warm实现极简（14行），维护成本接近零
-   - 运行开销<20ms，可由定时器调用无感知
-   - 即使在无问题环境中运行也无害
-
-3. **诊断价值：**
-   - RSS监控(`_process_memory()`)提供内存压力诊断能力
-   - 有助于区分内存换页vs CPU限流
-   - 生产环境问题排查的重要工具
-
-4. **预防性设计：**
-   - 容器配置变更（内存限制、cgroup设置）可能重新引入问题
-   - keep-alive模式是成熟的生产实践
-   - 预防优于救火
-
-### 不保留的理由（已驳回）
-
-- ❌ "当前环境无需" - 当前环境不是目标环境
-- ❌ "增加复杂度" - 复杂度增加可忽略（<20行代码）
-- ❌ "无法验证效果" - 在生产环境可验证
-
-### 最终决策
-
-**保留**，并在生产部署文档中明确标注：
-- /api/warm应由健康检查或定时任务定期调用（推荐30秒间隔）
-- 监控/api/vibration首次调用延迟，设置告警阈值1秒
-- 若生产环境未复现冷启动问题，可考虑移除但应保留监控
-
-## 总结
-
-### 已完成任务
-
-| 任务 | 状态 | 备注 |
-|------|------|------|
-| RA1: /api/warm实现 | ✓ | 已提交e2dc501 |
-| RA2: 测试 | ✓ | 4个测试通过 |
-| RA3: 冷启动测量 | ✓ | 发现环境差异 |
-| RA4: 部署配置 | ⚠️ | 待生产环境验证 |
-| RA5: 对比数据 | ✓ | 已收集 |
-| RA6: RSS验证 | ⚠️ | 脚本已创建，待Linux环境 |
-| RA7: 负载测试 | ✓ | 100%成功率 |
-| RA8: 延迟百分位 | ✓ | p95=0.687s |
-| RA9: 优化决策 | ✓ | 保留实现 |
-
-### 关键发现
-
-1. **冷启动问题环境特定：** Windows<50ms，Linux容器30-43s
-2. **负载测试性能良好：** p95延迟0.687秒，100%成功率
-3. **横幅完整性确认：** FaultDiagnosis.tsx两个Notice横幅均在
-4. **A4'.1 RSS探针已就位：** 可在Linux生产环境启用诊断
-
-### 后续行动
-
-1. **生产验证（必需）：**
-   - 在Linux容器环境测量冷启动延迟
-   - 配置keep-alive定期调用/api/warm
-   - 执行RSS稳定性测试
-
-2. **监控设置（推荐）：**
-   - /api/vibration首次调用延迟告警（阈值1秒）
-   - RSS增长率监控（检测内存泄漏）
-
-3. **文档更新（推荐）：**
-   - 在部署文档中说明/api/warm的作用和配置
-   - 记录环境差异发现
-
-## 附件
-
-### 新增文件
-
-1. `backend/tests/conftest.py` - pytest fixture配置
-2. `backend/tests/test_warm_endpoint.py` - /api/warm测试套件
-3. `backend/scripts/measure_cold_start.py` - 冷启动测量脚本
-4. `backend/scripts/monitor_rss.py` - RSS监控脚本
-5. `backend/scripts/load_test.py` - 负载测试脚本
-6. `docs/PART_A_COMPLETION.md` - 本报告
-
-### 修改文件
-
-- 无（所有Part A代码已在之前提交）
-
-### Git提交记录
+# Part A: first-call latency on the deployed service
+
+Measured 2026-08-16 / 2026-08-17 against `https://pumpguard-dt-api.onrender.com`.
+
+Every number below is a `curl` timing taken from outside the container against
+the deployed service. The previous version of this file (commit 509bccc)
+reported local Windows measurements. Those are withdrawn: the phenomenon under
+investigation does not occur locally -- A4'.1 had already established a 0.16 s
+first call and a 0.00 s second call on this machine -- so local timings carry no
+information about it. The scripts under `backend/scripts/` are retained as
+tooling; none of their output counts toward an acceptance item.
+
+## The problem
+
+A first `/api/vibration` after an idle period cost 42.86 s, recorded earlier
+against this same service. Second and subsequent calls cost 0.31 s. Prior work
+eliminated: instance cold start (`/api/health` answered in 0.21 s), memory
+eviction (RSS 212.3 MiB against a 512 MiB limit, 41 %), lazy import (scipy is
+imported at application start through the `routes.py` top-level chain), event
+loop blocking (every endpoint is `def`, not `async def`), and session creation
+cost (0.31 s and 0.35 s for the second and third sessions).
+
+## Pre-flight
 
 ```
-e2dc501 (2026-08-16 15:32:11) A1: add /api/warm
-4708adc (2026-08-16 10:53:15) A4'.1: add RSS probe to /api/health
+$ git log --oneline -5
+509bccc Part A: tests, measurement scripts, and completion report
+e2dc501 A1: add /api/warm, a lightweight endpoint that keeps the native paths resident
+4708adc A4'.1: add an RSS probe to /api/health to distinguish the first-call cost
+306acde step2: name the two deliberate FFT differences into the source
+18c69c2 step2: read the tick interval from the backend rate
+
+$ git log origin/main --oneline -3
+e2dc501 A1: add /api/warm, a lightweight endpoint that keeps the native paths resident
+4708adc A4'.1: add an RSS probe to /api/health to distinguish the first-call cost
+306acde step2: name the two deliberate FFT differences into the source
+
+$ curl -s https://pumpguard-dt-api.onrender.com/api/health
+{"status":"ok","service":"pumpguard-dt-api","version":"1.0.0","schema_version":"1.0.0","environment":"production","process":{"rss_mib":211.5,"peak_rss_mib":214.3,"limit_mib":512.0},"simulation_engine":{"running":true,"data_source":"SIMULATION","telemetry_rate_hz":5.0,"sessions":{"live":0,"capacity":200,"created":0,"evicted_idle":0,"evicted_for_capacity":0}},"ml_model":true,"ml_model_detail":{"loaded":true,"model_dir":"models","classes":["cavitation","dry_run","flow_restriction","imbalance","misalignment","normal","sensor_fault"],"has_diagnosis_module":true,"reason":""},"database":{"connected":true,"url":"sqlite:///./data/pumpguard.db","retained_ticks":0},"timestamp":"2026-08-16T11:58:58.635979+00:00"}
+
+$ curl -s -o /dev/null -w '%{http_code}\n' https://pumpguard-dt-api.onrender.com/api/warm
+200
 ```
 
-## 结论
+`/api/warm` was live, local HEAD was one commit ahead of `origin/main`, so
+509bccc was pushed and Render redeployed before measuring.
 
-Part A任务已完成代码实现、测试验证和性能测量。核心优化（/api/warm和RSS监控）已就位，决策为保留。
+## RA-a: how long the warming lasts
 
-在Windows开发环境中冷启动问题不存在，需要在生产Linux容器环境中重新验证优化效果。所有验证脚本已创建，可直接在目标环境执行。
+Each gap is preceded by one `GET /api/warm` and by no other call on the heavy
+path.
 
-**Part A can proceed to commit.**
+```
+gap 3min: 0.532236s
+gap 5min: 0.408818s
+gap 10min: 0.396293s
+gap 20min: 32.839108s
+```
+
+Bisected:
+
+```
+gap 13min: 0.579985s
+gap 16min: 0.535778s
+```
+
+The boundary is between 16 and 20 minutes. Everything up to 16 minutes is under
+0.6 s; 20 minutes costs 32.8 s.
+
+**32.8 s is the reported problem, reproduced.** It is the same phenomenon as the
+42.86 s recorded earlier against this service -- not a platform change, not a
+network artefact, not a measurement error in the original. Warming has an
+effective life somewhere between 16 and 20 minutes, and past it the first call
+costs tens of seconds.
+
+Note on what was running during all of this: the repository's keep-alive
+workflow was pinging `/api/health` every 10 minutes throughout every
+measurement above, including the 20-minute gap that cost 32.8 s. Pinging
+`/api/health` therefore does not preserve whatever `/api/vibration` needs. The
+gaps above are gaps since the last `/api/warm`, not gaps since the last request
+of any kind.
+
+## RA-b: is /api/warm sufficient on its own
+
+The question this answers: can the expensive path be kept alive by a cheap
+request, or does it need the expensive request itself?
+
+Warmed with `/api/warm` only -- three calls at 10-minute spacing over 30
+minutes, with no `/api/vibration` anywhere in that window -- then one timed
+call:
+
+```
+RA-b: Second warm call (10min interval)
+Third warm call (20min total)
+Testing /api/vibration after 30min warm-only preservation...
+RA-b result: 0.399370s
+```
+
+0.399 s, against 32.839 s at a 20-minute unwarmed gap. **`/api/warm` is
+sufficient. It is adopted as the keep-alive target.**
+
+### Mechanism: not established
+
+Two candidates remained after the earlier eliminations: cgroup CPU quota
+throttling, and shared-library page reclaim. This measurement does not separate
+them, and saying otherwise would be reading more out of it than it contains.
+
+Page reclaim predicts the result: periodically touching the pages keeps them
+resident. But cgroup CFS burst credit predicts it equally well -- a periodic
+light request accrues and maintains burst credit just as a periodic light
+request touches pages. Both mechanisms are consistent with "a cheap call every
+few minutes keeps the expensive call fast", and nothing observable from outside
+the container tells them apart.
+
+What is established is operational, not causal: **periodic lightweight warming
+works, measured directly.**
+
+One consequence worth recording because it is untested. If the mechanism is
+burst credit, the benefit should degrade under concurrent load -- credit spent
+by one request is not available to the next, so a burst of simultaneous
+requests would not all be fast. Under page reclaim there is no such
+interaction. No concurrent-load measurement was taken against the deployed
+service, so this remains open.
+
+## RA-d: steady state
+
+Warmed for one hour, then ten consecutive calls.
+
+```
+WARMUP PHASE: Calling API every 10 minutes for 1 hour
+
+[2026-08-16 21:50:09] Warmup call 1/6
+  Status: 200, Latency: 878.22ms
+[2026-08-16 22:00:10] Warmup call 2/6
+  Status: 200, Latency: 776.24ms
+[2026-08-16 22:10:11] Warmup call 3/6
+  Status: 200, Latency: 897.01ms
+[2026-08-16 22:20:12] Warmup call 4/6
+  Status: 200, Latency: 991.07ms
+[2026-08-16 22:30:13] Warmup call 5/6
+  Status: 200, Latency: 1716.19ms
+[2026-08-16 22:40:15] Warmup call 6/6
+  Status: 200, Latency: 792.30ms
+
+STEADY-STATE MEASUREMENT: 10 consecutive calls
+
+[2026-08-16 22:40:15] Call 1/10   Status: 200, Latency: 694.24ms
+[2026-08-16 22:40:16] Call 2/10   Status: 200, Latency: 705.24ms
+[2026-08-16 22:40:17] Call 3/10   Status: 200, Latency: 688.64ms
+[2026-08-16 22:40:18] Call 4/10   Status: 200, Latency: 705.28ms
+[2026-08-16 22:40:18] Call 5/10   Status: 200, Latency: 796.49ms
+[2026-08-16 22:40:19] Call 6/10   Status: 200, Latency: 884.06ms
+[2026-08-16 22:40:20] Call 7/10   Status: 200, Latency: 695.29ms
+[2026-08-16 22:40:21] Call 8/10   Status: 200, Latency: 835.48ms
+[2026-08-16 22:40:21] Call 9/10   Status: 200, Latency: 759.25ms
+[2026-08-16 22:40:22] Call 10/10  Status: 200, Latency: 821.46ms
+
+Total calls: 10
+Average latency: 758.54ms
+Min latency: 688.64ms
+Max latency: 884.06ms
+Std deviation: 67.66ms
+```
+
+Steady state is 0.76 s, range 689-884 ms.
+
+Jitter, recorded and not corrected: warmup call 5/6 came in at 1716 ms, roughly
+double its neighbours, under identical conditions. The steady-state ten span
+195 ms end to end. This is a 0.1-CPU instance and visible jitter is expected
+there. It is a property of the tier, not a defect to chase.
+
+## RA-c: withdrawn
+
+The intended measurement was a timed `/api/vibration` immediately after a
+deployment completes. One was taken, at 0.709801 s, and it is not admissible.
+
+Render runs a health check as part of finishing a deployment, and the
+repository's keep-alive workflow fires on its own schedule regardless of what
+is being measured. By the time a deployment reports itself complete, the heavy
+path has already been hit by traffic that the measurement did not control for.
+The item cannot answer the question it was written to ask, so it is removed
+from the acceptance list rather than reported with a caveat.
+
+## Keep-alive configuration
+
+`.github/workflows/keep-alive.yml`, changed in this commit:
+
+| | before | after |
+|---|---|---|
+| target | `/api/health` | `/api/warm` |
+| interval | 10 min | 8 min |
+
+Target, because RA-a shows `/api/health` pinging does not preserve the heavy
+path and RA-b shows `/api/warm` does.
+
+Interval, from the bisection: 16 minutes is the longest gap still measured
+under a second, and half of it leaves a full skipped run of margin, which
+GitHub's best-effort scheduler needs. The former 10 minutes was derived from
+Render's ~15-minute idle suspension -- a premise these measurements retire,
+since suspension was never what was costing the 30 seconds -- so it is not
+carried forward even though it happens to be close.
+
+## Status
+
+| item | result |
+|---|---|
+| RA-a warming lifetime | boundary between 16 and 20 min; 32.8 s past it |
+| RA-b `/api/warm` sufficiency | 0.399 s after 30 min warm-only -- sufficient, adopted |
+| RA-b mechanism | not established; page reclaim and burst credit both fit |
+| RA-d steady state | 0.76 s mean, 689-884 ms, sd 68 ms |
+| RA-c post-deploy first call | withdrawn, not measurable |
+| keep-alive | `/api/warm` every 8 min |
+
+Open, untested: whether warming still helps under concurrent load. Relevant
+only if the mechanism is CFS burst credit.

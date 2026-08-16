@@ -1,27 +1,64 @@
-# Keeps the API awake so a visitor does not meet a cold start.
+# Keeps the API's native code paths resident so a visitor does not meet a
+# 30-second first call.
 #
-# The backend runs on Render's free tier, which suspends a service after about
-# 15 minutes without traffic and then takes close to a minute to wake. On a
-# portfolio site that minute is the whole visit: a recruiter opening the link
-# sees a "waking up" banner, waits, and leaves. The UI handles that window
-# honestly (see ColdStartBanner in AppShell.tsx), but the cheapest fix is to
-# stop the window from existing.
+# WHAT THIS IS FOR, corrected against measurement on 2026-08-16/17.
 #
-# A GET every 10 minutes is comfortably inside the 15-minute idle timeout with
-# room for a skipped run -- GitHub's scheduled runners are best-effort and can
-# be delayed by several minutes under load, so 14 minutes would not be safe.
+# The original premise was Render's free-tier idle suspension: no traffic for
+# ~15 minutes, service sleeps, next request pays close to a minute. That
+# premise is not what this workflow is defending against, and the endpoint it
+# used to ping did not defend against the real thing.
 #
-# Cost: 144 requests a day against a health endpoint that touches no simulation
-# state. This is deliberately a keep-alive and not a synthetic monitor; it does
-# not assert on the payload beyond the status code, because a health check that
-# fails the build on a slow response would page nobody and annoy everybody.
+# Measured on the deployed service, each gap preceded by one GET /api/warm and
+# nothing else on the heavy path:
+#
+#     gap  3 min   0.532 s
+#     gap  5 min   0.409 s
+#     gap 10 min   0.396 s
+#     gap 13 min   0.580 s
+#     gap 16 min   0.536 s
+#     gap 20 min  32.839 s
+#
+# Throughout every one of those measurements this workflow was running on its
+# old 10-minute /api/health schedule. The 20-minute gap still cost 32.8 s. So
+# pinging /api/health does NOT keep the expensive path warm -- it only keeps
+# the instance from sleeping, which was never the binding constraint. The
+# 32.8 s reproduces the 42.9 s figure recorded earlier against this same
+# service; it is the same phenomenon, not a platform change.
+#
+# INTERVAL. The last gap measured under one second is 16 minutes; 20 minutes
+# is cold. Half of the last-good gap is the interval, which leaves a full
+# skipped run of margin -- GitHub's scheduled runners are best-effort and can
+# be delayed several minutes under load.
+#
+#     8 minutes.
+#
+# The previous 10 minutes was inherited from the 15-minute-suspension premise
+# above, which the measurements have retired. It is not carried over.
+#
+# TARGET. /api/warm, not /api/health. /api/warm runs one small
+# scipy.signal.welch, which is the same native path /api/vibration depends on;
+# /api/health touches none of it. Verified directly: warming with /api/warm
+# alone for 30 minutes, with no call to /api/vibration in that window, left
+# the first /api/vibration at 0.399 s.
+#
+# MECHANISM: not established. Periodic light warming works; why it works is
+# undetermined. Shared-library page reclaim and cgroup CPU burst-credit
+# accrual both predict this result, and nothing measured from outside the
+# container separates them. If it is burst credit, the benefit may shrink
+# under concurrent load -- not tested.
+#
+# Cost: 180 requests a day against an endpoint that allocates a 256-point
+# array and does one 64-point Welch. It asserts nothing about the payload
+# beyond the status code, on purpose: a health check that fails the build on a
+# slow response would page nobody and annoy everybody.
 
 name: Keep the API awake
 
 on:
   schedule:
-    # Every 10 minutes. Times are UTC.
-    - cron: '*/10 * * * *'
+    # Every 8 minutes. Times are UTC. See the interval note above -- this is
+    # half the longest gap measured to still return under a second.
+    - cron: '*/8 * * * *'
   # Manual trigger, for warming the service before a demo or an interview.
   workflow_dispatch:
 
@@ -39,23 +76,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Ping the health endpoint
+      - name: Warm the native code paths
         env:
           # Overridable via a repository variable so a fork or a renamed service
           # does not need a code change.
           API_URL: ${{ vars.API_BASE_URL || 'https://pumpguard-dt-api.onrender.com' }}
         run: |
           set -euo pipefail
-          # --max-time 90 rather than the default: if the service HAS gone to
-          # sleep, this request is the one paying for the wake, and timing out
+          # --max-time 90 rather than the default: if the paths HAVE gone cold,
+          # this request is the one paying to bring them back, and timing out
           # at 30 s would abandon it half-started and leave the next visitor to
           # pay again.
           status=$(curl --silent --show-error --location \
                         --max-time 90 \
                         --retry 2 --retry-delay 10 --retry-all-errors \
                         --output /dev/null --write-out '%{http_code}' \
-                        "${API_URL}/api/health")
-          echo "GET ${API_URL}/api/health -> ${status}"
+                        "${API_URL}/api/warm")
+          echo "GET ${API_URL}/api/warm -> ${status}"
           if [ "${status}" != "200" ]; then
-            echo "::warning::Health endpoint returned ${status}"
+            echo "::warning::Warm endpoint returned ${status}"
           fi
