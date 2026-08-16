@@ -36,6 +36,7 @@ from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from scipy import signal
 from pydantic import BaseModel, Field
 
 from ..config.alarm_thresholds import VIBRATION
@@ -171,6 +172,36 @@ def _frame(session: Session) -> Telemetry:
 # --------------------------------------------------------------------------
 # Health
 # --------------------------------------------------------------------------
+
+
+@router.get("/api/warm")
+def warm() -> dict[str, Any]:
+    """Keep the native code paths resident. No business computation.
+
+    The measured problem: after a spell in which only cheap endpoints are hit,
+    the first /api/vibration costs 30-43 s, and every call after it costs 0.3 s.
+    A4'.1 ruled out the obvious explanations -- the instance is hot, RSS sits at
+    41 % of the limit, scipy is imported at application startup rather than
+    lazily, every handler is `def` so nothing blocks the event loop, and session
+    creation is not the cost.
+
+    What is left is that the numpy/scipy native code goes cold: either the host
+    reclaims the file-backed pages of the shared objects, or the free tier's CPU
+    quota throttles a burst after idle. Both are fixed the same way -- exercise
+    the path often enough that it never goes cold.
+
+    IMPORTING IS NOT ENOUGH. The import already happened at startup and will not
+    fault the pages back in. This has to call through into the C extensions,
+    which is why there is a welch() here and not just a reference to it. Keep it
+    that way: replacing this with an import or a no-op would leave an endpoint
+    that returns 200 and warms nothing.
+
+    Deliberately tiny -- a 256-point array, a 64-point segment -- so it costs
+    almost no CPU while still touching the same native code /api/vibration needs.
+    """
+    x = np.random.rand(256)
+    signal.welch(x, nperseg=64)
+    return {"ok": True}
 
 
 def _process_memory() -> dict[str, Any]:
