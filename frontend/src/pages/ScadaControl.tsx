@@ -99,6 +99,16 @@ const TRANSITIONS: { from: string; event: string; to: string }[] = [
   { from: 'MAINTENANCE', event: 'MAINTENANCE', to: 'OFF' },
 ]
 
+/**
+ * Derive the permitted starting states for each command from the state machine.
+ * This is the single source of truth — the command cards read from here rather
+ * than duplicating the rules.
+ */
+function getPermittedStates(event: string): string[] {
+  const states = TRANSITIONS.filter((t) => t.event === event).map((t) => t.from)
+  return states.length > 0 ? states : []
+}
+
 export function ScadaControl() {
   const {
     telemetry,
@@ -133,6 +143,24 @@ export function ScadaControl() {
                 (spec.command === 'manual' && !autoMode) ||
                 (spec.command === 'maintenance' &&
                   telemetry.asset_state === AssetState.MAINTENANCE)
+
+              // Map each command to its state machine event name
+              const eventMap: Record<ScadaCommand, string | null> = {
+                start: 'START',
+                stop: 'STOP',
+                reset: 'RESET',
+                auto: null,  // control mode, not a state transition
+                manual: null,  // control mode, not a state transition
+                maintenance: 'MAINTENANCE',
+                estop: 'EMERGENCY STOP',
+              }
+
+              const event = eventMap[spec.command]
+              const permittedStates = event ? getPermittedStates(event) : []
+              const permittedLabel = permittedStates.length > 0
+                ? `Permitted from: ${permittedStates.join(', ')}`
+                : null
+
               return (
                 <div key={spec.command} className="rounded-lg border border-slate-200 p-3">
                   <button
@@ -153,10 +181,14 @@ export function ScadaControl() {
                   <p className="mt-2 text-xs text-slate-600">{spec.description}</p>
                   {blocked ? (
                     <p className="mt-1.5 text-xs font-medium text-amber-800">Blocked: {blocked}</p>
-                  ) : (
+                  ) : permittedLabel ? (
                     <p className="mt-1.5 text-xs font-medium text-green-700">
-                      Permitted in state {telemetry.asset_state}
+                      {permittedLabel}
                       {active ? ' -- currently selected' : ''}
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-xs font-medium text-slate-500">
+                      Control mode{active ? ' -- currently selected' : ''}
                     </p>
                   )}
                 </div>
