@@ -149,14 +149,18 @@ export function DigitalTwinPage() {
             <Notice tone="warn" title="Visual vibration magnification">
               The shake in the scene is exaggerated by roughly {VIBRATION_MAGNIFICATION}x. At{' '}
               {fmt(telemetry.vibration_rms_mm_s, 2)} mm/s and{' '}
-              {fmt(telemetry.rotational_frequency_hz, 1)} Hz the true peak displacement is about{' '}
+              {fmt(telemetry.rotational_frequency_hz, 1)} Hz the equivalent sinusoidal peak
+              displacement is about{' '}
               {fmt(
                 ((Math.SQRT2 * (telemetry.vibration_rms_mm_s / 1000)) /
                   (2 * Math.PI * Math.max(1, telemetry.rotational_frequency_hz))) *
                   1e6,
                 0,
               )}{' '}
-              micrometres -- invisible at this scale. It is a visual aid, not true displacement.
+              micrometres -- invisible at this scale. "Equivalent sinusoidal" is the honest
+              qualifier: it is the amplitude of the single sine at shaft frequency that would carry
+              this much velocity, not the largest excursion the real broadband signal makes. It is a
+              visual aid, not true displacement.
             </Notice>
             <dl className="mt-3">
               <DefinitionRow label="Shaft speed" value={fmtUnit(telemetry.rpm, 'rpm', 0)} />

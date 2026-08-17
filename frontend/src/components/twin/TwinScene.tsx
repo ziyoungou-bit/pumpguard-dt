@@ -366,8 +366,12 @@ function VibrationShake({
       group.current.position.set(0, 0, 0)
       return
     }
-    // Peak displacement from velocity RMS: x_pk = sqrt(2) * v_rms / (2 pi f).
-    // In metres this is tens of microns, hence the magnification factor.
+    // Equivalent sinusoidal peak displacement from velocity RMS:
+    // x_pk,sine = sqrt(2) * v_rms / (2 pi f). The sqrt(2) is the RMS-to-
+    // amplitude ratio of a single sinusoid, not the measured crest factor of
+    // the waveform block -- the scene shakes at one frequency, so a single
+    // sinusoid is exactly what it is being asked to draw. In metres this is
+    // tens of microns, hence the magnification factor.
     const f = Math.max(1, telemetry.rotational_frequency_hz)
     const displacementM = (Math.SQRT2 * (telemetry.vibration_rms_mm_s / 1000)) / (2 * Math.PI * f)
     const amplitude = Math.min(0.05, displacementM * VIBRATION_MAGNIFICATION)

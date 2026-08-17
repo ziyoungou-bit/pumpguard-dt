@@ -26,11 +26,17 @@ import {
   systemResistance,
 } from '../lib/pumpPhysics'
 import { bearingDefectFrequencies } from '../lib/vibration'
+import { useVibrationSignals } from '../lib/vibrationSignals'
 import { fmt, fmtUnit, humanise } from '../lib/format'
 import { Card, DefinitionRow, Formula, PageHeading, ProvenanceNote } from '../components/ui'
 
 export function Engineering() {
   const { telemetry, valveOpening } = useAppState()
+  // The same waveform block the Vibration page measures its statistics from.
+  // Peak and crest factor below are taken from THESE samples, not from the
+  // telemetry scalars, which carry an assumed crest factor rather than a
+  // measured maximum.
+  const vibration = useVibrationSignals()
 
   const flowM3s = lpmToM3s(telemetry.flow_lpm)
   const K = systemResistance(valveOpening)
@@ -159,17 +165,27 @@ export function Engineering() {
         <Card title="Vibration statistics">
           <div className="space-y-3">
             <Formula
-              expression={`RMS = sqrt( (1/N) sum x_i^2 ) = ${fmt(telemetry.vibration_rms_mm_s, 3)} mm/s\nPeak = max |x_i| = ${fmt(telemetry.vibration_peak_mm_s, 3)} mm/s\nCrest factor = Peak / RMS = ${fmt(telemetry.crest_factor, 3)}`}
-              note="A pure sine gives a crest factor of 1.414. Values well above that indicate impulsive content -- bearing defects, cavitation collapse, looseness."
+              expression={
+                `RMS = sqrt( (1/N) sum x_i^2 ) = ${fmt(vibration.statistics.rms_mm_s, 3)} mm/s\n` +
+                `Peak = max |x_i| = ${fmt(vibration.statistics.peak_mm_s, 3)} mm/s\n` +
+                `Crest factor = Peak / RMS = ${
+                  vibration.statistics.crest_factor === null
+                    ? '— (RMS is zero; the ratio does not exist)'
+                    : fmt(vibration.statistics.crest_factor, 3)
+                }`
+              }
+              where={`Measured over the ${vibration.waveform.length}-sample block ${vibration.fromApi ? 'returned by the backend' : 'synthesised in the browser from this frame'} -- the same block the Vibration page plots, taken from one shared source so the two pages cannot disagree.`}
+              note="A pure sine gives a crest factor of 1.414. Values well above that indicate impulsive content -- bearing defects, cavitation collapse, looseness. These three lines used to read telemetry.vibration_peak_mm_s and telemetry.crest_factor, which are not a measured maximum: the backend builds the overall RMS from component amplitudes and multiplies it by an ASSUMED crest factor, so on a healthy machine the ratio was pinned to 1.414 by construction while this very caption explained that a value of 1.414 means something. `max |x_i|` now takes an actual maximum."
             />
             <Formula
-              expression={`x_peak = sqrt(2) v_rms / (2 pi f)\n       = 1.414 x ${fmt(telemetry.vibration_rms_mm_s / 1000, 6)} / (2 pi x ${fmt(Math.max(1, telemetry.rotational_frequency_hz), 2)}) = ${fmt(
+              expression={`x_peak,sine = sqrt(2) v_rms / (2 pi f)\n              = 1.414 x ${fmt(telemetry.vibration_rms_mm_s / 1000, 6)} / (2 pi x ${fmt(Math.max(1, telemetry.rotational_frequency_hz), 2)}) = ${fmt(
                 ((Math.SQRT2 * (telemetry.vibration_rms_mm_s / 1000)) /
                   (2 * Math.PI * Math.max(1, telemetry.rotational_frequency_hz))) *
                   1e6,
                 1,
               )} micrometres`}
-              where="Velocity RMS converted to peak displacement -- this is why the digital twin has to magnify its shake to show anything at all."
+              where="Equivalent sinusoidal peak displacement -- this is why the digital twin has to magnify its shake to show anything at all."
+              note="The sqrt(2) here is not the crest factor of the measured block and does not have to agree with the line above. It is the RMS-to-amplitude ratio of the single sinusoid that would carry this much velocity at the shaft frequency, which is the standard way to state a displacement equivalent for a broadband velocity reading. Using the block's real crest factor instead would answer a different question: the largest instantaneous excursion, at whichever frequency produced it."
             />
             <Formula
               expression={
