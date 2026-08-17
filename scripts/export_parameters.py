@@ -114,7 +114,17 @@ def render() -> str:
         "export const LPM_PER_M3S = 60000"
     )
     parts.append(emit_object("FLUID", FLUID))
-    parts.append(emit_object("PUMP", PUMP))
+    parts.append(
+        emit_object(
+            "PUMP",
+            PUMP,
+            # bep_efficiency is a property, not a field: it is computed from the
+            # EU 547/2012 correlation rather than typed in. Projected here so
+            # the browser gets the identical float instead of re-deriving it and
+            # drifting in the last decimal.
+            extra={"bep_efficiency": PUMP.bep_efficiency},
+        )
+    )
     parts.append(emit_object("MOTOR", MOTOR))
     parts.append(emit_object("CIRCUIT", CIRCUIT))
     parts.append(emit_object("BEARING", BEARING))
@@ -136,10 +146,15 @@ def render() -> str:
     )
     parts.append(
         "/**\n"
-        " * n_q = N sqrt(Q) / H^0.75 at the rated duty point, N in rpm, Q in m^3/s.\n"
-        " * See PumpParameters.specific_speed_nq for why this number sets eta_BEP.\n"
+        " * n_s = N sqrt(Q_BEP) / (H_BEP / i)^0.75, N in rpm, Q in m^3/s, i = 1.\n"
+        " * The definition in Commission Regulation (EU) No 547/2012, Annex III.\n"
+        " * See PumpParameters.specific_speed_nq.\n"
         " */\n"
-        f"export const SPECIFIC_SPEED_NQ = {PUMP.specific_speed_nq!r}"
+        f"export const SPECIFIC_SPEED_NS = {PUMP.specific_speed_nq!r}"
+    )
+    parts.append(
+        "/** Head on the rated curve at the BEP flow, metres. H0 - a Q_BEP^2. */\n"
+        f"export const BEP_HEAD_M = {PUMP.bep_head_m!r}"
     )
 
     # -- protection setpoints ------------------------------------------------

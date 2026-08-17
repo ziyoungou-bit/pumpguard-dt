@@ -43,7 +43,6 @@ function PathColumn({ path, accent }: { path: OperatingPath; accent: string }) {
           value={`${fmt(path.overall_efficiency * 100, 1)} %`}
         />
         <DefinitionRow label="Hydraulic power" value={fmtUnit(path.hydraulic_power_w, 'W', 1)} />
-        <DefinitionRow label="Parasitic drag" value={fmtUnit(path.parasitic_power_w, 'W', 1)} />
         <DefinitionRow label="Shaft power" value={fmtUnit(path.shaft_power_w, 'W', 1)} />
         <DefinitionRow label="Electrical power" value={fmtUnit(path.electrical_power_w, 'W', 1)} />
         <DefinitionRow label="Motor current" value={fmtUnit(path.motor_current_a, 'A', 3)} />
@@ -176,9 +175,10 @@ export function EnergyComparison() {
           speed but drags the operating point away from BEP, so pump efficiency falls to{' '}
           {fmt(comparison.throttle.pump_efficiency * 100, 1)} %. Variable speed moves the BEP with
           the pump -- efficiency is read on the reduced flow Q N_rated / N -- so it stays near the
-          peak at {fmt(comparison.vsd.pump_efficiency * 100, 1)} %. The drag term helps too: it
-          scales with N^3, falling from {fmt(comparison.throttle.parasitic_power_w, 1)} W to{' '}
-          {fmt(comparison.vsd.parasitic_power_w, 1)} W.
+          peak at {fmt(comparison.vsd.pump_efficiency * 100, 1)} %. That difference in efficiency is
+          the whole of the saving on this row: eta_pump is the OVERALL pump efficiency of EU
+          547/2012 Annex I(4), so disc friction, leakage and mechanical loss are already inside it
+          and there is no separate drag term to add on top.
         </p>
       </Card>
 

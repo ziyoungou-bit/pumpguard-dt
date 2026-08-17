@@ -171,8 +171,13 @@ describe('pump hydraulics', () => {
 
   it('lands the fully-open duty point near the best efficiency point', () => {
     const point = solveOperatingPoint(PUMP.rated_speed_rpm, 1)
-    expect(point.flow_lpm).toBeGreaterThan(18)
-    expect(point.flow_lpm).toBeLessThan(24)
+    // Stated as a fraction of the BEP flow rather than as a flow in L/min, so
+    // that rescaling the duty point cannot break it while a genuinely bad
+    // selection still does. 0.85 to 1.10 of BEP is the band a pump selection is
+    // normally required to sit inside.
+    const fractionOfBep = point.flow_lpm / PUMP.bep_flow_lpm
+    expect(fractionOfBep).toBeGreaterThan(0.85)
+    expect(fractionOfBep).toBeLessThan(1.1)
   })
 
   it('moves the operating point up the pump curve as the valve closes', () => {

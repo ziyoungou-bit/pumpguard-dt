@@ -9,9 +9,10 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  BEP_HEAD_M,
   MOTOR,
   PUMP,
-  SPECIFIC_SPEED_NQ,
+  SPECIFIC_SPEED_NS,
   bepFlowLpm,
   cavitationOnsetFlowLpm,
   lpmToM3s,
@@ -25,24 +26,57 @@ import {
 
 const RATED = PUMP.rated_speed_rpm // 1450
 
-describe('specific speed sets the efficiency band', () => {
-  it('computes n_q from the rated duty point rather than storing it', () => {
-    // 1450 * sqrt(20/60000) / 8^0.75
-    expect(SPECIFIC_SPEED_NQ).toBeCloseTo(5.57, 2)
+describe('specific speed and the efficiency it implies', () => {
+  it('evaluates n_s at the BEP, not at the duty point', () => {
+    // n_s = N sqrt(Q_BEP) / (H_BEP)^0.75 with Q in m^3/s -- the definition in
+    // Commission Regulation (EU) No 547/2012, Annex III. Specific speed is
+    // defined AT the best efficiency point; an earlier version evaluated it at
+    // the duty point, which is a different place on the same curve and gives a
+    // different number for the same machine.
+    expect(BEP_HEAD_M).toBeCloseTo(7.16, 3)
+    expect(SPECIFIC_SPEED_NS).toBeCloseTo(
+      (RATED * Math.sqrt(lpmToM3s(PUMP.bep_flow_lpm))) / Math.pow(BEP_HEAD_M, 0.75),
+      9,
+    )
+    expect(SPECIFIC_SPEED_NS).toBeCloseTo(14.876, 3)
   })
 
-  it('peaks at an efficiency consistent with a low-n_q impeller', () => {
-    // n_q 5.6 is far below the conventional 10-80 band; measured peak
-    // efficiency for this size and shape sits at 35-45 %.
-    expect(PUMP.bep_efficiency).toBeGreaterThanOrEqual(0.35)
-    expect(PUMP.bep_efficiency).toBeLessThanOrEqual(0.45)
+  it('derives eta_BEP from the regulation instead of storing it', () => {
+    // Peak efficiency is not a parameter of this project. It is the Annex III
+    // minimum-efficiency correlation, recomputed here from the published
+    // coefficients so that a hand-typed eta_BEP anywhere would fail this test
+    // rather than quietly propagate.
+    //
+    // UNIT TRAP, and it is the regulation's own rather than a slip here: n_s is
+    // defined with Q in m^3/s while y is the natural log of Q in m^3/h. Folding
+    // the two flows into one variable moves eta_BEP by about 14 points.
+    const x = Math.log(SPECIFIC_SPEED_NS)
+    const y = Math.log((PUMP.bep_flow_lpm * 60) / 1000)
+    const cEsob1450Mei040 = 128.07
+    const expected =
+      (88.59 * x +
+        13.46 * y -
+        11.48 * x * x -
+        0.85 * y * y -
+        0.38 * x * y -
+        cEsob1450Mei040) /
+      100
+    expect(PUMP.bep_efficiency).toBeCloseTo(expected, 12)
+  })
+
+  it('sits inside the range the correlation is published for', () => {
+    // Article 2(2)/2(3) and the Annex III fitting range. Outside 6..80 the
+    // correlation is an extrapolation and the figure it returns is not a
+    // regulatory minimum at all.
+    expect(SPECIFIC_SPEED_NS).toBeGreaterThanOrEqual(6)
+    expect(SPECIFIC_SPEED_NS).toBeLessThanOrEqual(80)
   })
 })
 
 describe('1. default duty point', () => {
   it('lands on the rated duty point at 1450 rpm with the valve fully open', () => {
     const point = solveOperatingPoint(RATED, 1)
-    expect(point.flow_lpm).toBeCloseTo(21.0, 1)
+    expect(point.flow_lpm).toBeCloseTo(115.52, 1)
     expect(point.pump_head_m).toBeCloseTo(7.59, 2)
     expect(point.flow_lpm).toBeGreaterThan(0)
     expect(point.no_intersection).toBe(false)
@@ -76,7 +110,7 @@ describe('2. halving the speed', () => {
     expect(half.flow_lpm / full.flow_lpm).toBeCloseTo(0.316, 2)
     expect(half.pump_head_m / full.pump_head_m).toBeCloseTo(0.337, 2)
     // Recorded explicitly so nobody "fixes" this back to 0.5 later.
-    expect(half.flow_lpm).toBeCloseTo(6.64, 1)
+    expect(half.flow_lpm).toBeCloseTo(36.53, 1)
     expect(half.pump_head_m).toBeCloseTo(2.56, 1)
   })
 
@@ -89,24 +123,27 @@ describe('2. halving the speed', () => {
 })
 
 describe('3. BEP flow tracks speed', () => {
-  it('moves the BEP to 11 L/min at 725 rpm', () => {
-    expect(bepFlowLpm(725)).toBeCloseTo(11.0, 3)
-    expect(bepFlowLpm(RATED)).toBeCloseTo(22.0, 3)
+  it('moves the BEP to 60.5 L/min at 725 rpm', () => {
+    expect(bepFlowLpm(725)).toBeCloseTo(60.5, 3)
+    expect(bepFlowLpm(RATED)).toBeCloseTo(121.0, 3)
   })
 
   it('reads efficiency on reduced flow, not absolute flow', () => {
-    // 11 L/min at 725 rpm is the same homologous point as 22 L/min at 1450.
+    // 60.5 L/min at 725 rpm is the same homologous point as 121 L/min at 1450.
     // Looking eta up on absolute flow would report this as far off BEP.
-    expect(pumpEfficiency(11, 725)).toBeCloseTo(pumpEfficiency(22, RATED), 6)
+    expect(pumpEfficiency(60.5, 725)).toBeCloseTo(pumpEfficiency(121, RATED), 6)
   })
 })
 
 describe('4. near shutoff', () => {
   it('gives single-digit efficiency at 5 % of BEP flow', () => {
-    // x = 1/22 = 0.04545; eta = 0.42 (2x - x^2) = 3.73 %.
+    // x = 0.05; eta = eta_BEP (2x - x^2) = 0.0975 eta_BEP. Asserted against
+    // eta_BEP rather than against a number, because writing the product down
+    // would put a second copy of the peak efficiency in the codebase.
     // The old span-plus-floor parabola returned 21.6 % here.
-    expect(pumpEfficiency(1, RATED) * 100).toBeCloseTo(3.73, 2)
-    expect(pumpEfficiency(1, RATED) * 100).toBeLessThan(5)
+    const nearShutoff = pumpEfficiency(0.05 * PUMP.bep_flow_lpm, RATED)
+    expect(nearShutoff).toBeCloseTo(PUMP.bep_efficiency * (2 * 0.05 - 0.05 * 0.05), 12)
+    expect(nearShutoff).toBeLessThan(0.05)
   })
 
   it('forces eta(0) = 0 with no floor', () => {
@@ -119,10 +156,14 @@ describe('4. near shutoff', () => {
 })
 
 describe('5. peak efficiency', () => {
-  it('sits in the 40-45 % band', () => {
+  it('is reached at the BEP flow and equals the derived eta_BEP', () => {
+    // The parabola's only job at its own peak is to return eta_BEP unchanged.
+    // There is no band to assert here: the value is not chosen, it falls out of
+    // the Annex III correlation, which the first group above checks directly.
     const peak = pumpEfficiency(bepFlowLpm(RATED), RATED)
-    expect(peak).toBeGreaterThanOrEqual(0.4)
-    expect(peak).toBeLessThanOrEqual(0.45)
+    expect(peak).toBeCloseTo(PUMP.bep_efficiency, 12)
+    expect(peak).toBeGreaterThan(pumpEfficiency(0.9 * bepFlowLpm(RATED), RATED))
+    expect(peak).toBeGreaterThan(pumpEfficiency(1.1 * bepFlowLpm(RATED), RATED))
   })
 })
 
@@ -134,7 +175,7 @@ describe('7. throttling the valve', () => {
     // The counter-intuitive part: closing a valve RAISES discharge pressure.
     expect(shut.flow_lpm).toBeLessThan(open.flow_lpm)
     expect(shut.pump_head_m).toBeGreaterThan(open.pump_head_m)
-    expect(shut.flow_lpm).toBeCloseTo(17.93, 1)
+    expect(shut.flow_lpm).toBeCloseTo(98.64, 1)
     expect(shut.pump_head_m).toBeCloseTo(8.78, 1)
   })
 
@@ -151,7 +192,7 @@ describe('7. throttling the valve', () => {
     // The low-n_q rising P-Q characteristic is real; it just needs a wider
     // lever than 30 % to show. At 10 % open the point is at 0.44 Q_BEP.
     const hard = solveOperatingPoint(RATED, 0.1)
-    expect(hard.flow_lpm).toBeCloseTo(9.75, 1)
+    expect(hard.flow_lpm).toBeCloseTo(53.63, 1)
     expect(hard.shaft_power_w).toBeLessThan(open.shaft_power_w)
   })
 })
@@ -170,15 +211,16 @@ describe('8. below the static head', () => {
 describe('NPSH, after the port drift was closed', () => {
   it('uses the NET suction lift, matching the backend', () => {
     // barometric 10.111 m, net lift 0.4 m (1.2 standing in 0.8 of liquid),
-    // friction 0.551 m at 21 L/min. The old port subtracted the full 1.2 m.
+    // friction 0.546 m at 115.5 L/min. The old port subtracted the full 1.2 m.
     const point = solveOperatingPoint(RATED, 1)
-    expect(npshAvailableM(lpmToM3s(point.flow_lpm))).toBeCloseTo(9.16, 2)
+    expect(npshAvailableM(lpmToM3s(point.flow_lpm))).toBeCloseTo(9.165, 3)
   })
 
   it('scales NPSHr as a homologous quantity', () => {
-    expect(npshRequiredM(21.0, RATED)).toBeCloseTo(2.1435, 4)
+    const point = solveOperatingPoint(RATED, 1)
+    expect(npshRequiredM(point.flow_lpm, RATED)).toBeCloseTo(2.1441, 4)
     // Same homologous point at half speed: quarter of the requirement.
-    expect(npshRequiredM(10.5, RATED / 2)).toBeCloseTo(2.1435 / 4, 4)
+    expect(npshRequiredM(point.flow_lpm / 2, RATED / 2)).toBeCloseTo(2.1441 / 4, 4)
   })
 
   it('puts the clean-suction cavitation boundary beyond runout', () => {
@@ -193,6 +235,6 @@ describe('NPSH, after the port drift was closed', () => {
   it('brings the boundary onto the chart once the suction is restricted', () => {
     const onset = cavitationOnsetFlowLpm(RATED, 0.5)
     expect(onset as number).toBeLessThan(runoutFlowLpm(RATED))
-    expect(onset as number).toBeCloseTo(19.7, 0)
+    expect(onset as number).toBeCloseTo(108.7, 0)
   })
 })

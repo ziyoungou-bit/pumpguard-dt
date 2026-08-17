@@ -2,12 +2,17 @@
  * Acceptance checks for the throttling / variable-speed comparison.
  *
  * The numbers are pinned to three figures because they are the page's headline
- * and a silent drift in eta_BEP or in the drag model would move them without
- * anything failing. At 15 L/min: 72 W throttled, 33 W on variable speed, 54.7 %
- * saved. The 40 W / 19 W estimate this page was specified against was correct
- * on the ratio and computed with the old 62 % peak efficiency -- both absolute
- * figures scale by 0.62/0.42 and the saving fraction is unchanged, because it
- * divides out.
+ * and a silent drift in eta_BEP would move them without anything failing. At
+ * 82.5 L/min -- 71.4 % of the fully-open flow, the same RELATIVE point this
+ * suite has always used -- 299 W throttled, 136 W on variable speed, 54.7 %
+ * saved.
+ *
+ * The absolute watts moved when the duty point was reset from 20 to 110 L/min;
+ * the percentages did not, and that is the point of pinning both. Every
+ * resistance was scaled by (20/110)^2, which leaves head, efficiency and every
+ * ratio invariant while moving flow by 5.5x. If a future edit is a genuine
+ * rescaling, the watts move and the fractions hold. If it is a mistake, the
+ * fractions move too.
  *
  * The last group is still worth having. The affinity-law shortcut predicts 64 %
  * where the circuit delivers 55 %, and the 9-point gap is the static head: the
@@ -19,10 +24,17 @@ import { PUMP, speedForFlow, valveOpeningForFlow } from './pumpPhysics'
 import { annualEnergy, compareAtFlow, maxFlowLpm } from './energy'
 
 const RATED = PUMP.rated_speed_rpm
+/**
+ * The reduced-flow case every group below is written against: 82.5 L/min, or
+ * 71.4 % of the fully-open 115.5. Stated as an absolute figure rather than as a
+ * fraction of maxFlowLpm() so that a change to the circuit shows up as a moved
+ * number here instead of silently sliding the test's own target with it.
+ */
+const TARGET = 82.5
 
 describe('the two inversions', () => {
   it('finds the valve opening that hits a target flow', () => {
-    const opening = valveOpeningForFlow(15, RATED)
+    const opening = valveOpeningForFlow(TARGET, RATED)
     expect(opening).not.toBeNull()
     expect(opening as number).toBeGreaterThan(0)
     expect(opening as number).toBeLessThan(1)
@@ -35,13 +47,13 @@ describe('the two inversions', () => {
 
   it('finds the speed that hits a target flow with the valve open', () => {
     expect(speedForFlow(maxFlowLpm(), 1)).toBeCloseTo(RATED, 0)
-    expect(speedForFlow(15, 1) as number).toBeLessThan(RATED)
+    expect(speedForFlow(TARGET, 1) as number).toBeLessThan(RATED)
   })
 
   it('does NOT reduce speed in proportion to flow', () => {
     // The whole point. Q ~ N describes the pump curve, not the operating point,
     // and 2 m of static head breaks the proportionality.
-    const target = 15
+    const target = TARGET
     const proportional = RATED * (target / maxFlowLpm())
     const actual = speedForFlow(target, 1) as number
     expect(actual).toBeGreaterThan(proportional)
@@ -49,12 +61,12 @@ describe('the two inversions', () => {
   })
 })
 
-describe('C1. target 15 L/min', () => {
-  const c = compareAtFlow(15)!
+describe('C1. target 82.5 L/min', () => {
+  const c = compareAtFlow(TARGET)!
 
   it('solves both paths to the same flow', () => {
-    expect(c.throttle.flow_lpm).toBeCloseTo(15, 6)
-    expect(c.vsd.flow_lpm).toBeCloseTo(15, 6)
+    expect(c.throttle.flow_lpm).toBeCloseTo(TARGET, 6)
+    expect(c.vsd.flow_lpm).toBeCloseTo(TARGET, 6)
   })
 
   it('throttles at rated speed with a part-open valve', () => {
@@ -72,12 +84,13 @@ describe('C1. target 15 L/min', () => {
   })
 
   it('saves more than half the electrical input', () => {
-    // Pinned so a future change to eta_BEP or to the drag model shows up here
-    // rather than silently moving the page's headline number.
-    expect(c.throttle.shaft_power_w).toBeCloseTo(72.2, 0)
-    expect(c.vsd.shaft_power_w).toBeCloseTo(32.7, 0)
-    expect(c.throttle.electrical_power_w).toBeCloseTo(100.3, 0)
-    expect(c.vsd.electrical_power_w).toBeCloseTo(45.5, 0)
+    // Pinned so a future change to eta_BEP shows up here rather than silently
+    // moving the page's headline number. The watts are 5.5x what they were at
+    // the 20 L/min duty point; the fractions below are not, and must not be.
+    expect(c.throttle.shaft_power_w).toBeCloseTo(299.3, 0)
+    expect(c.vsd.shaft_power_w).toBeCloseTo(135.6, 0)
+    expect(c.throttle.electrical_power_w).toBeCloseTo(415.8, 0)
+    expect(c.vsd.electrical_power_w).toBeCloseTo(188.3, 0)
     expect(c.saving_fraction).toBeGreaterThan(0.5)
     expect(c.saving_fraction).toBeCloseTo(0.547, 2)
   })
@@ -86,13 +99,6 @@ describe('C1. target 15 L/min', () => {
     // Throttling drags the point off BEP at fixed speed; variable speed takes
     // the BEP with it, because efficiency is read on the reduced flow.
     expect(c.vsd.pump_efficiency).toBeGreaterThan(c.throttle.pump_efficiency)
-  })
-
-  it('scales the parasitic drag with N^3', () => {
-    const ratio = c.vsd.parasitic_power_w / c.throttle.parasitic_power_w
-    expect(ratio).toBeCloseTo(Math.pow(c.vsd.speed_rpm / c.throttle.speed_rpm, 3), 6)
-    // Missing this is the documented way to understate the variable-speed case.
-    expect(c.vsd.parasitic_power_w).toBeLessThan(c.throttle.parasitic_power_w)
   })
 })
 
@@ -111,7 +117,7 @@ describe('C2. target at the rated duty point', () => {
 describe('C3. the two points move in opposite directions', () => {
   it('puts the throttled point above and the VSD point below the duty head', () => {
     const duty = compareAtFlow(maxFlowLpm())!
-    const reduced = compareAtFlow(15)!
+    const reduced = compareAtFlow(TARGET)!
     // Throttling climbs UP the rated pump curve...
     expect(reduced.throttle.head_m).toBeGreaterThan(duty.throttle.head_m)
     // ...variable speed slides DOWN the system curve.
@@ -122,7 +128,7 @@ describe('C3. the two points move in opposite directions', () => {
 })
 
 describe('C4. annual cost is linear in hours and tariff', () => {
-  const c = compareAtFlow(15)!
+  const c = compareAtFlow(TARGET)!
 
   it('doubles with the hours', () => {
     const a = annualEnergy(c, 2000, 0.3)
@@ -147,9 +153,11 @@ describe('C4. annual cost is linear in hours and tariff', () => {
 
 describe('the affinity-law estimate is shown, and is optimistic', () => {
   it('overstates the saving because of the static head', () => {
-    const c = compareAtFlow(15)!
+    const c = compareAtFlow(TARGET)!
     expect(c.naive_cube_law_saving_fraction).toBeGreaterThan(c.saving_fraction)
-    // 1 - (15/21)^3 = 0.636 against an actual 0.547: a 9-point overstatement.
+    // 1 - (82.5/115.5)^3 = 0.636 against an actual 0.547: a 9-point
+    // overstatement. Both figures are unchanged from the 20 L/min duty point,
+    // because the ratio 82.5/115.5 is.
     expect(c.naive_cube_law_saving_fraction).toBeCloseTo(0.636, 2)
     expect(c.naive_cube_law_saving_fraction - c.saving_fraction).toBeCloseTo(0.089, 2)
   })

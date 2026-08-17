@@ -1,6 +1,6 @@
 {
   "name": "PumpGuard DT fault classifier and anomaly detector",
-  "created_at": "2026-08-14T00:25:51.138606+00:00",
+  "created_at": "2026-08-16T23:08:59.532818+00:00",
   "feature_order": [
     "rpm",
     "flow_lpm",
@@ -58,8 +58,8 @@
     },
     "trained_on": "NORMAL rows only",
     "score_reference": [
-      0.1394052927885861,
-      -0.06449066627483702
+      0.1550802774836275,
+      -0.060946530083134054
     ]
   },
   "split": {
@@ -67,12 +67,12 @@
     "why": "Frames inside one run are consecutive ticks of one machine at one operating point and are near-duplicates. A random row split puts near-identical twins on both sides and measures memorisation."
   },
   "headline_metrics": {
-    "accuracy": 0.8835685483870968,
-    "f1_macro": 0.9167054637169088,
-    "anomaly_roc_auc": 0.9043526291001772
+    "accuracy": 0.8236336032388664,
+    "f1_macro": 0.8756526327542064,
+    "anomaly_roc_auc": 0.8432202888257575
   },
   "dataset_metadata": {
-    "generated_at": "2026-08-14T00:25:43.584814+00:00",
+    "generated_at": "2026-08-16T23:08:51.472771+00:00",
     "seed": 20260812,
     "schema": {
       "metadata_columns": [
@@ -199,15 +199,15 @@
     },
     "runs_planned": 720,
     "runs_with_no_usable_frames": [],
-    "row_count": 15879,
+    "row_count": 15732,
     "class_counts": {
       "normal": 3840,
       "sensor_fault": 3004,
-      "cavitation": 2315,
-      "imbalance": 1680,
-      "misalignment": 1680,
+      "cavitation": 2320,
       "flow_restriction": 1680,
-      "dry_run": 1680
+      "dry_run": 1680,
+      "misalignment": 1642,
+      "imbalance": 1566
     },
     "runs_per_class_realised": {
       "cavitation": 130,

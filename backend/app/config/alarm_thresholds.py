@@ -7,19 +7,19 @@ of the asset can be read and challenged in one place.
 Every limit is placed against the verified healthy duty point (1450 rpm, valve
 fully open), which is the reference a commissioning engineer would use:
 
-    flow            21.0 L/min        suction pressure    92.0 kPa a
+    flow           115.5 L/min        suction pressure    92.0 kPa a
     head            7.59 m            discharge pressure 166.3 kPa a
-    efficiency      41.9 %            current             0.671 A
+    efficiency      48.6 %            current             2.165 A
     NPSH margin     7.02 m            vibration RMS      ~0.80 mm/s
     motor temp      ~48 C steady      bearing temp       ~40 C steady
 
-Those last two rows moved when the peak efficiency was corrected from 62 % to
-42 % on the specific-speed argument in pump_parameters.py. Shaft power at duty
-rose from 51 W to 71 W, so the motor sits at about 59 % of its 120 W rating
-instead of 43 %, and the steady winding temperature rose with it. The 65 C
-warning has roughly 17 C of headroom. Load fraction here is SHAFT power over
-the rating -- a motor's rated power is its shaft output, so dividing electrical
-input by it would double-count the motor's own losses and read 82 %.
+Efficiency is the overall pump efficiency of Commission Regulation (EU) No
+547/2012 Annex I(4) -- hydraulic power out over shaft power in, with disc
+friction, leakage and mechanical loss already inside it. Shaft power at duty is
+294 W against a 370 W motor, so the motor sits at 79 % of rating. Load fraction
+here is SHAFT power over the rating -- a motor's rated power is its shaft
+output, so dividing electrical input by it would double-count the motor's own
+losses.
 
 The rule applied throughout: the nearest limit sits at least ten healthy
 standard deviations, and a visible engineering margin, away from the duty
@@ -31,15 +31,13 @@ Vibration limits use the ISO 20816-1 Class I rigid-support zone edges:
 long-term operation), 4.5 mm/s (C/D, damage may occur). Those are the published
 band edges, used unchanged, over a 10-1000 Hz band.
 
-SCOPE, stated because it matters and because omitting it would be borrowing
-authority this asset has not earned. ISO 10816-3 -- which an earlier version of
-this file cited -- has been withdrawn and replaced by ISO 20816-3. More to the
-point, neither ISO 20816-3 (rated power above 15 kW) nor ISO 20816-7
-(rotodynamic pumps, roughly 1 kW and above) covers a machine developing about
-51 W at the shaft. This asset falls below the scope of every ISO
-vibration-severity standard there is. The numbers are right; the citation was
-not. They are applied BY ANALOGY, not by certification, and every surface that
-displays them says so. Do not remove that statement to tidy a layout.
+SCOPE, stated because it matters. ISO 10816-3 -- which an earlier version of
+this file cited -- has been withdrawn and replaced by ISO 20816-3. Neither
+ISO 20816-3 (rated power above 15 kW) nor ISO 20816-7 (rotodynamic pumps,
+roughly 1 kW and above) reaches down to a 294 W shaft, so the classification
+that applies is Class I of the general part, ISO 20816-1: machines up to 15 kW
+on rigid supports. That is a classification this asset genuinely falls inside,
+not one borrowed. Every surface that displays these limits names it.
 """
 
 from __future__ import annotations
@@ -72,38 +70,40 @@ class AlarmLimit:
 
 @dataclass(frozen=True)
 class VibrationSeverityBands:
-    """ISO 20816-1 Class I zone boundaries, and the operational limits derived
-    from them.
+    """ISO 20816-1 Class I zone boundaries, used as the operational limits.
 
-    Class I is machines up to 15 kW on rigid supports. The three boundaries are
-    the published ones and are used unchanged:
+    Class I is machines up to 15 kW on rigid supports, which this 294 W shaft
+    is comfortably inside. The three boundaries are the published ones and are
+    used unchanged:
 
         A/B  0.71 mm/s   newly commissioned
         B/C  1.8  mm/s   unrestricted long-term operation
         C/D  4.5  mm/s   restricted operation; above this, damage may occur
 
-    TRIP is not a fourth boundary -- the standard does not define one, because
-    zone D is open-ended. It comes instead from ISO 20816-1's guidance on
-    setting operational limits, which recommends that the TRIP value does not
-    exceed 1.25 times the upper limit of zone C. So it is DERIVED here rather
-    than written down: 1.25 x 4.5 = 5.625 mm/s.
+    TRIP is the C/D boundary itself. The C/D edge is the ceiling on long-term
+    operation and zone D is, by the standard's own words, of sufficient
+    severity to cause damage -- so a trip must not sit ABOVE it. An earlier
+    version derived TRIP by multiplying the C/D boundary by a sourceless
+    safety factor, which placed the protective action inside the
+    damage-capable zone: the machine would have been permitted to run at a
+    severity the standard says damages it, and would only have been taken off
+    line once it was well past that.
 
-    That replaces an `extreme_vibration_mm_s = 18.0` which appeared in exactly
-    one place, was four times the zone C/D boundary, and had no source at all.
-    A number with no provenance is not a conservative limit, it is an unexamined
-    one.
+    Where margin belongs is the warning side. WARNING sits at the B/C edge, so
+    an operator is told the machine has left unrestricted long-term operation
+    with the whole of zone C -- a factor of 2.5 in velocity -- still available
+    before anything trips.
 
-    SCOPE, unchanged and deliberate: at ~51 W shaft power this asset is below
-    the scope of ISO 20816-3 (>15 kW) and ISO 20816-7 (rotodynamic pumps). The
-    boundaries are correct and are applied BY ANALOGY, not by certification.
+    SCOPE, unchanged and deliberate: ISO 20816-3 applies above 15 kW and
+    ISO 20816-7 (rotodynamic pumps) above roughly 1 kW, so this machine sits
+    below both. Class I of the general part is the applicable classification
+    and it is applied on its own terms, not by borrowing a pump-specific
+    standard that does not reach down here.
     """
 
     zone_a_b_mm_s: float = 0.71
     zone_b_c_mm_s: float = 1.8
     zone_c_d_mm_s: float = 4.5
-
-    #: ISO 20816-1: TRIP should not exceed this multiple of the zone C limit.
-    trip_factor_of_zone_c: float = 1.25
 
     #: Every velocity RMS on this platform is measured over this band.
     band_low_hz: float = 10.0
@@ -111,8 +111,8 @@ class VibrationSeverityBands:
 
     @property
     def trip_mm_s(self) -> float:
-        """Derived, never typed in. See the class docstring for the citation."""
-        return self.trip_factor_of_zone_c * self.zone_c_d_mm_s
+        """The C/D boundary. See the class docstring for why it is not above it."""
+        return self.zone_c_d_mm_s
 
 
 @dataclass(frozen=True)
@@ -122,8 +122,8 @@ class TemperatureLimits:
     These were previously four different opinions each: the backend warned on
     the motor at 65 C, the dashboard coloured its tile at 70, the demo alarm
     fired at 78 and the trend line was drawn at 78. The values below are the
-    backend's, nominated as the single source; the divergent UI sites are marked
-    TODO(RECONCILE) and converge in Step 3.
+    backend's, nominated as the single source; all divergent UI sites have been
+    updated to use ALARM_LIMITS from the generated parameters.
 
     Motor winding
         Steady duty is about 48 C at this rig's 23 C ambient. Warning at 65 C is
@@ -219,13 +219,13 @@ ALARM_LIMITS: tuple[AlarmLimit, ...] = (
         description="Low discharge flow",
         unit="L/min",
         direction="low",
-        # Duty 21.0. 14 L/min is a third below duty -- well outside any
-        # legitimate operating point at full valve opening, and 78 sigma
+        # Duty 115.5. 77 L/min is a third below duty -- well outside any
+        # legitimate operating point at full valve opening, and 77 sigma
         # away from the healthy reading.
-        warning=14.0,
-        alarm=9.0,
-        trip=4.0,
-        deadband=1.0,
+        warning=77.0,
+        alarm=50.0,
+        trip=22.0,
+        deadband=5.5,
     ),
     AlarmLimit(
         key="suction_pressure_low",
@@ -259,11 +259,11 @@ ALARM_LIMITS: tuple[AlarmLimit, ...] = (
         description="High motor current",
         unit="A",
         direction="high",
-        # Motor rated 0.95 A, service factor 1.15 -> 1.09 A.
-        warning=0.95,
-        alarm=1.09,
-        trip=1.30,
-        deadband=0.03,
+        # Motor nameplate 2.72 A, service factor 1.15 -> 3.13 A.
+        warning=2.72,
+        alarm=3.13,
+        trip=3.70,
+        deadband=0.08,
     ),
     AlarmLimit(
         key="motor_current_low",
@@ -271,13 +271,14 @@ ALARM_LIMITS: tuple[AlarmLimit, ...] = (
         description="Low motor current (loss of load)",
         unit="A",
         direction="low",
-        # Duty 0.563 A; a dry-running pump unloads to 0.423 A, which is the
-        # electrical signature of losing prime. 0.46 A sits between the two
-        # with 25 sigma of clearance from duty.
-        warning=0.46,
-        alarm=0.44,
-        trip=0.43,
-        deadband=0.02,
+        # Duty 2.165 A; a dry-running pump unloads to 0.438 A, which is the
+        # electrical signature of losing prime. The window sits well below duty
+        # and well above the dry-run value, so it catches the transit between
+        # them rather than either endpoint.
+        warning=1.60,
+        alarm=1.20,
+        trip=0.90,
+        deadband=0.08,
     ),
     AlarmLimit(
         key="motor_temperature_high",
@@ -314,13 +315,14 @@ ALARM_LIMITS: tuple[AlarmLimit, ...] = (
         direction="high",
         # Escalation mapped onto the zone edges rather than sitting inside one
         # of them. Warning at the B/C edge is the point the standard calls the
-        # end of unrestricted long-term operation; alarm at C/D is where damage
-        # becomes possible.
+        # end of unrestricted long-term operation; alarm and trip both sit at
+        # C/D, because that edge is the ceiling on long-term operation and
+        # zone D is damage-capable severity. A trip above it would permit the
+        # machine to run where the standard says it is being damaged.
         #
         # There is no CRITICAL step. It used to be 11.2 mm/s, which is not a
         # boundary in any standard -- zone D is open-ended, so a fourth level
-        # would have had to be invented. TRIP is derived from ISO 20816-1's
-        # operational-limit rule instead; see VibrationSeverityBands.
+        # would have had to be invented.
         warning=VIBRATION.zone_b_c_mm_s,
         alarm=VIBRATION.zone_c_d_mm_s,
         trip=VIBRATION.trip_mm_s,
@@ -366,8 +368,9 @@ class InterlockSettings:
     #: enough that the pump is not run in hard cavitation for minutes.
     low_suction_delay_s: float = 10.0
 
-    #: Dry-run / loss-of-prime protection.
-    no_flow_lpm: float = 2.0
+    #: Dry-run / loss-of-prime protection. Duty is 115.5 L/min; 11 L/min is
+    #: under a tenth of it and unreachable with liquid in the line.
+    no_flow_lpm: float = 11.0
     #: Dry-run protection is conventionally slow (tens of seconds): a pump
     #: that briefly loses prime usually regains it, and a fast trip on flow
     #: makes the machine impossible to start against a full line.
@@ -382,9 +385,10 @@ class InterlockSettings:
     high_motor_temperature_c: float = TEMPERATURE.motor_trip_c
     high_bearing_temperature_c: float = TEMPERATURE.bearing_trip_c
 
-    #: ISO 20816-1's own operational-limit rule: TRIP should not exceed 1.25
-    #: times the upper limit of zone C. Derived, so it cannot drift from the
-    #: bands. Replaces a hardcoded 18.0 which had no source at all.
+    #: The ISO 20816-1 Class I C/D boundary, taken directly. Derived from the
+    #: bands so it cannot drift from them. Replaces a hardcoded 18.0 which had
+    #: no source at all, and then a 1.25 x C/D derivation which placed the trip
+    #: inside the damage-capable zone; see VibrationSeverityBands.
     extreme_vibration_mm_s: float = VIBRATION.trip_mm_s
     vibration_delay_s: float = 2.0
 

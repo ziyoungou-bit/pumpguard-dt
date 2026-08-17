@@ -44,7 +44,7 @@
 import type { Alarm, Diagnosis, Telemetry } from '../types/contracts'
 import { AssetState, DataSource, FaultType } from '../types/contracts'
 import { computeFrame } from '../lib/frameModel'
-import { ASSET_TAGS, THERMAL } from '../lib/pumpPhysics'
+import { ASSET_TAGS, PUMP, THERMAL } from '../lib/pumpPhysics'
 import { ALARM_LIMITS, TICK_INTERVAL_S, VIBRATION } from '../lib/pumpParameters.generated'
 import { seededRandom } from '../lib/vibration'
 
@@ -309,7 +309,7 @@ export function demoDiagnosis(frame: Telemetry): Diagnosis {
       statement: `Pump efficiency ${(frame.pump_efficiency * 100).toFixed(1)} % at ${frame.flow_lpm.toFixed(1)} L/min`,
       measured_value: frame.pump_efficiency,
       unit: '-',
-      reference: 'Best efficiency point: 62 % at 22 L/min',
+      reference: `Best efficiency point: ${(PUMP.bep_efficiency * 100).toFixed(1)} % at ${PUMP.bep_flow_lpm} L/min`,
     },
   ]
 
@@ -403,33 +403,27 @@ const ALARM_RULES: AlarmRule[] = [
     description: 'Bearing temperature high',
     severity: 'WARNING',
     unit: 'degC',
-    // TODO(RECONCILE): shows 62, source says
-    // ALARM_LIMITS.bearing_temperature_high.alarm = 65.
-    threshold: 62,
+    threshold: ALARM_LIMITS.bearing_temperature_high.alarm,
     read: (f) => f.bearing_temperature_c,
-    active: (f) => f.bearing_temperature_c > 62,
+    active: (f) => f.bearing_temperature_c > ALARM_LIMITS.bearing_temperature_high.alarm,
   },
   {
     tag: ASSET_TAGS.motor_temperature,
     description: 'Motor winding temperature high',
     severity: 'ALARM',
     unit: 'degC',
-    // TODO(RECONCILE): shows 78, source says
-    // ALARM_LIMITS.motor_temperature_high.alarm = 75.
-    threshold: 78,
+    threshold: ALARM_LIMITS.motor_temperature_high.alarm,
     read: (f) => f.motor_temperature_c,
-    active: (f) => f.motor_temperature_c > 78,
+    active: (f) => f.motor_temperature_c > ALARM_LIMITS.motor_temperature_high.alarm,
   },
   {
     tag: ASSET_TAGS.flow,
     description: 'Flow below minimum continuous stable flow',
     severity: 'WARNING',
     unit: 'L/min',
-    // TODO(RECONCILE): shows 8, source says
-    // ALARM_LIMITS.flow_low.warning = 14.
-    threshold: 8,
+    threshold: ALARM_LIMITS.flow_low.warning,
     read: (f) => f.flow_lpm,
-    active: (f) => f.asset_state === AssetState.RUNNING && f.flow_lpm < 8,
+    active: (f) => f.asset_state === AssetState.RUNNING && f.flow_lpm < ALARM_LIMITS.flow_low.warning,
   },
   {
     tag: ASSET_TAGS.current,

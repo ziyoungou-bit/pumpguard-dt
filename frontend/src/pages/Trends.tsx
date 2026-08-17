@@ -35,12 +35,8 @@ const SIGNALS: SignalSpec[] = [
   { key: 'differential_pressure_kpa', label: 'Differential pressure', unit: 'kPa' },
   { key: 'suction_pressure_kpa', label: 'Suction pressure', unit: 'kPa abs' },
   { key: 'motor_current_a', label: 'Motor current', unit: 'A', limit: ALARM_LIMITS.motor_current_high.alarm },
-  // TODO(RECONCILE): shows 78, source says
-  // ALARM_LIMITS.motor_temperature_high.alarm = 75.
-  { key: 'motor_temperature_c', label: 'Motor temperature', unit: 'degC', limit: 78 },
-  // TODO(RECONCILE): shows 62, source says
-  // ALARM_LIMITS.bearing_temperature_high.alarm = 65.
-  { key: 'bearing_temperature_c', label: 'Bearing temperature', unit: 'degC', limit: 62 },
+  { key: 'motor_temperature_c', label: 'Motor temperature', unit: 'degC', limit: ALARM_LIMITS.motor_temperature_high.alarm },
+  { key: 'bearing_temperature_c', label: 'Bearing temperature', unit: 'degC', limit: ALARM_LIMITS.bearing_temperature_high.alarm },
   { key: 'rpm', label: 'Speed', unit: 'rpm' },
   { key: 'pump_efficiency', label: 'Pump efficiency', unit: '-' },
   { key: 'npsh_margin_m', label: 'NPSH margin', unit: 'm' },

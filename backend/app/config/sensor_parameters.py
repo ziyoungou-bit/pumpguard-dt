@@ -8,8 +8,8 @@ touching logic.
 Noise levels are 1-sigma in engineering units and are sized against the
 verified duty point of the rig (1450 rpm, valve open):
 
-    FT-101   21.0 L/min      PT-101   92.0 kPa a
-    PT-102  166.3 kPa a      CT-101   0.563 A
+    FT-101  115.5 L/min      PT-101   92.0 kPa a
+    PT-102  166.3 kPa a      CT-101   2.165 A
     TT-101  ~41 C steady     TT-102   ~35 C steady
     ACC-101  ~0.75 mm/s RMS  RPM-101  1450 rev/min
 
@@ -74,13 +74,18 @@ SENSORS: dict[str, SensorSpec] = {
     ASSET.flow: SensorSpec(
         tag=ASSET.flow,
         unit="L/min",
-        noise_sigma=0.09,
+        # Every figure on this instrument is the previous rig's scaled by the
+        # duty-flow ratio 110/20, so the noise stays at the same 0.43 % of the
+        # duty reading it was sized at. The range spans past the 190.5 L/min
+        # runout flow: a transmitter that saturates below runout would clamp
+        # the signal to a constant at exactly the condition it exists to see.
+        noise_sigma=0.50,
         range_min=0.0,
-        range_max=60.0,
+        range_max=250.0,
         resolution=0.01,
-        zero_deadband=0.05,
-        drift_rate_per_s=0.02,
-        bias_amount=3.0,
+        zero_deadband=0.28,
+        drift_rate_per_s=0.11,
+        bias_amount=16.5,
     ),
     ASSET.suction_pressure: SensorSpec(
         tag=ASSET.suction_pressure,
@@ -105,13 +110,15 @@ SENSORS: dict[str, SensorSpec] = {
     ASSET.current: SensorSpec(
         tag=ASSET.current,
         unit="A",
-        noise_sigma=0.004,
+        noise_sigma=0.010,
         range_min=0.0,
-        range_max=5.0,
+        # Duty is 2.17 A against a 2.72 A nameplate; 10 A spans locked-rotor
+        # inrush, which is the transient this instrument must not clip.
+        range_max=10.0,
         resolution=0.001,
         zero_deadband=0.005,
         drift_rate_per_s=0.002,
-        bias_amount=0.08,
+        bias_amount=0.25,
     ),
     ASSET.motor_temperature: SensorSpec(
         tag=ASSET.motor_temperature,

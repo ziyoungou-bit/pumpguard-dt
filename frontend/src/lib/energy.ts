@@ -6,10 +6,9 @@
  * building actually needs, do you close a valve or slow the pump?
  *
  * Nothing here is a new model. Both paths are solved with the same hydraulics
- * every other page uses -- the intersection of the pump and system curves, the
- * efficiency read on reduced flow, the parasitic drag scaling with N^3. Only
- * the QUESTION is new: instead of "what does this machine do", it is "what
- * would this machine cost, two ways".
+ * every other page uses -- the intersection of the pump and system curves and
+ * the efficiency read on reduced flow. Only the QUESTION is new: instead of
+ * "what does this machine do", it is "what would this machine cost, two ways".
  *
  * The result that matters is not the saving. It is WHY the saving is smaller
  * than the affinity laws suggest, which `naiveCubeLawSavingFraction` exists to
@@ -17,7 +16,6 @@
  */
 
 import {
-  MOTOR,
   PUMP,
   electricalPowerW,
   hydraulicPowerW,
@@ -43,7 +41,6 @@ export interface OperatingPath {
   /** Wire-to-water: hydraulic power over electrical input. */
   overall_efficiency: number
   hydraulic_power_w: number
-  parasitic_power_w: number
   shaft_power_w: number
   electrical_power_w: number
   motor_current_a: number
@@ -61,14 +58,8 @@ function buildPath(
   const headM = pumpHead(flowM3s, speedRpm)
   const efficiency = pumpEfficiency(flowLpm, speedRpm)
   const hydraulic = hydraulicPowerW(flowM3s, headM)
-  const shaft = shaftPowerW(hydraulic, efficiency, speedRpm)
+  const shaft = shaftPowerW(hydraulic, efficiency)
   const electrical = electricalPowerW(shaft)
-  // Broken out rather than buried inside shaftPowerW, because the N^3 scaling
-  // of the drag term is a real part of the variable-speed saving and a reader
-  // comparing two shaft powers is entitled to see where the difference came
-  // from. Omitting it is a documented way to understate the VSD case.
-  const parasitic =
-    MOTOR.parasitic_loss_at_rated_w * Math.pow(Math.max(0, speedRpm) / MOTOR.rated_speed_rpm, 3)
   return {
     key,
     label,
@@ -79,7 +70,6 @@ function buildPath(
     pump_efficiency: efficiency,
     overall_efficiency: electrical > 0 ? hydraulic / electrical : 0,
     hydraulic_power_w: hydraulic,
-    parasitic_power_w: parasitic,
     shaft_power_w: shaft,
     electrical_power_w: electrical,
     motor_current_a: motorCurrentA(electrical),
@@ -96,14 +86,14 @@ export interface EnergyComparison {
   /**
    * What the affinity laws alone would predict, for contrast.
    *
-   * P ~ N^3 with N ~ Q gives a saving of 1 - (Q/Q_rated)^3, which at 15 L/min
-   * out of 21 is 63.6 % -- against the 54.7 % the circuit actually delivers.
-   * The 9-point gap is the 2 m of static head: the affinity laws describe
-   * points on the PUMP curve, and the operating point only travels along them
-   * when the system curve passes through the origin. A pump with a geometric
-   * lift in front of it must still generate that lift at any speed, so the
-   * speed cannot fall in proportion to the flow and the cube never applies
-   * exactly.
+   * P ~ N^3 with N ~ Q gives a saving of 1 - (Q/Q_rated)^3, which at 82.5 out
+   * of 115.5 L/min is 63.6 % -- against the 54.7 % the circuit actually
+   * delivers. The 9-point gap is the 2 m of static head: the affinity laws
+   * describe points on the PUMP curve, and the operating point only travels
+   * along them when the system curve passes through the origin. A pump with a
+   * geometric lift in front of it must still generate that lift at any speed,
+   * so the speed cannot fall in proportion to the flow and the cube never
+   * applies exactly.
    *
    * Nine points is modest here because static head is only 2 m out of about
    * 9.75. The reason to show it anyway is that the error grows with the static

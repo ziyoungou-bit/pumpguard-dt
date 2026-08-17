@@ -1,18 +1,18 @@
 {
-  "generated_at": "2026-08-14T00:25:50.332498+00:00",
+  "generated_at": "2026-08-16T23:08:58.713424+00:00",
   "data_is_synthetic": true,
   "caveat": "All scores are measured on synthetic data produced by this project's own physics simulator. They describe how separable the simulated conditions are, not how the model would perform on a real pump. This is not an industrial accuracy claim.",
   "dataset": {
-    "rows": 15879,
+    "rows": 15732,
     "runs": 720,
     "class_counts": {
       "normal": 3840,
       "sensor_fault": 3004,
-      "cavitation": 2315,
-      "imbalance": 1680,
-      "misalignment": 1680,
+      "cavitation": 2320,
       "flow_restriction": 1680,
-      "dry_run": 1680
+      "dry_run": 1680,
+      "misalignment": 1642,
+      "imbalance": 1566
     },
     "runs_per_class": {
       "cavitation": 130,
@@ -23,78 +23,78 @@
       "normal": 160,
       "sensor_fault": 150
     },
-    "train_rows": 11911,
-    "test_rows": 3968,
-    "train_runs": 537,
-    "test_runs": 183
+    "train_rows": 11780,
+    "test_rows": 3952,
+    "train_runs": 536,
+    "test_runs": 184
   },
   "split": {
     "strategy": "StratifiedGroupKFold on run_id, stratified by class; fold 1 of 4 held out",
     "why": "Frames inside one run are consecutive ticks of one machine at one operating point and are near-duplicates. A random row split puts near-identical twins on both sides and measures memorisation."
   },
   "grouped_split": {
-    "accuracy": 0.8835685483870968,
-    "precision_macro": 0.916673907939707,
-    "recall_macro": 0.9175411788846326,
-    "f1_macro": 0.9167054637169088,
-    "precision_weighted": 0.8825593156069164,
-    "recall_weighted": 0.8835685483870968,
-    "f1_weighted": 0.8825525251878498,
+    "accuracy": 0.8236336032388664,
+    "precision_macro": 0.8819811583062452,
+    "recall_macro": 0.8730175022368762,
+    "f1_macro": 0.8756526327542064,
+    "precision_weighted": 0.8239468892995445,
+    "recall_weighted": 0.8236336032388664,
+    "f1_weighted": 0.8212284763944009,
     "per_class": {
       "normal": {
-        "precision": 0.7588582677165354,
-        "recall": 0.803125,
-        "f1-score": 0.7803643724696356,
+        "precision": 0.6225749559082893,
+        "recall": 0.7354166666666667,
+        "f1-score": 0.6743075453677173,
         "support": 960.0
       },
       "imbalance": {
         "precision": 1.0,
         "recall": 1.0,
         "f1-score": 1.0,
-        "support": 408.0
+        "support": 389.0
       },
       "misalignment": {
         "precision": 1.0,
         "recall": 1.0,
         "f1-score": 1.0,
-        "support": 432.0
+        "support": 411.0
       },
       "flow_restriction": {
-        "precision": 0.9345794392523364,
-        "recall": 0.9803921568627451,
-        "f1-score": 0.9569377990430622,
-        "support": 408.0
+        "precision": 1.0,
+        "recall": 0.9189814814814815,
+        "f1-score": 0.9577804583835947,
+        "support": 432.0
       },
       "cavitation": {
-        "precision": 1.0,
+        "precision": 0.9796264855687606,
         "recall": 1.0,
-        "f1-score": 1.0,
+        "f1-score": 0.9897084048027445,
         "support": 577.0
       },
       "dry_run": {
         "precision": 1.0,
-        "recall": 0.9814814814814815,
-        "f1-score": 0.9906542056074766,
+        "recall": 1.0,
+        "f1-score": 1.0,
         "support": 432.0
       },
       "sensor_fault": {
-        "precision": 0.7232796486090776,
-        "recall": 0.6577896138482024,
-        "f1-score": 0.6889818688981869,
+        "precision": 0.5716666666666667,
+        "recall": 0.4567243675099867,
+        "f1-score": 0.5077720207253886,
         "support": 751.0
       },
-      "accuracy": 0.8835685483870968,
+      "accuracy": 0.8236336032388664,
       "macro avg": {
-        "precision": 0.916673907939707,
-        "recall": 0.9175411788846327,
-        "f1-score": 0.9167054637169089,
-        "support": 3968.0
+        "precision": 0.8819811583062451,
+        "recall": 0.8730175022368764,
+        "f1-score": 0.8756526327542064,
+        "support": 3952.0
       },
       "weighted avg": {
-        "precision": 0.8825593156069164,
-        "recall": 0.8835685483870968,
-        "f1-score": 0.8825525251878498,
-        "support": 3968.0
+        "precision": 0.8239468892995444,
+        "recall": 0.8236336032388664,
+        "f1-score": 0.8212284763944009,
+        "support": 3952.0
       }
     },
     "confusion_matrix": {
@@ -110,17 +110,17 @@
       "rows_are_true": true,
       "matrix": [
         [
-          771,
+          706,
           0,
           0,
           0,
           0,
           0,
-          189
+          254
         ],
         [
           0,
-          408,
+          389,
           0,
           0,
           0,
@@ -130,20 +130,20 @@
         [
           0,
           0,
-          432,
+          411,
           0,
           0,
           0,
           0
         ],
         [
-          8,
+          32,
           0,
           0,
-          400,
+          397,
           0,
           0,
-          0
+          3
         ],
         [
           0,
@@ -158,39 +158,39 @@
           0,
           0,
           0,
-          8,
           0,
-          424,
+          0,
+          432,
           0
         ],
         [
-          237,
+          396,
           0,
           0,
-          20,
           0,
+          12,
           0,
-          494
+          343
         ]
       ]
     }
   },
   "leakage_check": {
-    "row_split_accuracy": 0.9921875,
-    "grouped_split_accuracy": 0.8835685483870968,
-    "inflation": 0.10861895161290325,
+    "row_split_accuracy": 0.9916497975708503,
+    "grouped_split_accuracy": 0.8236336032388664,
+    "inflation": 0.1680161943319839,
     "note": "The row-split number is the leaked one. It is recorded to be disbelieved."
   },
   "anomaly_detector": {
     "trained_on": "NORMAL rows of the training split only",
     "training_rows": 2880,
     "score_reference": {
-      "healthy_end": 0.1394052927885861,
-      "faulty_end": -0.06449066627483702
+      "healthy_end": 0.1550802774836275,
+      "faulty_end": -0.060946530083134054
     },
-    "healthy_mean_score": 0.2675254712192455,
-    "faulty_mean_score": 0.6385540752969519,
-    "roc_auc": 0.9043526291001772,
+    "healthy_mean_score": 0.30739333381381845,
+    "faulty_mean_score": 0.6353106768124163,
+    "roc_auc": 0.8432202888257575,
     "parameters": {
       "n_estimators": 200,
       "contamination": 0.02,

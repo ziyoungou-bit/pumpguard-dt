@@ -6,7 +6,15 @@ rather than appear, that an instrument failure is not a machine failure, and
 that two visitors never see each other's faults.
 
 Reference duty point, verified against `physics.pump_model` directly:
-21.0 L/min at 7.59 m, 61.9 % efficiency, 0.563 A at 1450 rpm, valve open.
+115.52 L/min at 7.59 m, 48.6 % efficiency, 2.165 A at 1450 rpm, valve open.
+
+Absolute tolerances on flow and current are stated at 5.5x their former size.
+That is not slack: the rig's duty flow moved from 20 to 110 L/min and FT-101's
+noise, deadband and drift were scaled by the same factor, so a tolerance left
+at its old absolute value would be testing the noise floor of a different
+instrument. The dimensionless assertions -- efficiency, ratios, orderings --
+keep their original tolerances, because the similarity transform leaves them
+untouched.
 """
 
 from __future__ import annotations
@@ -17,7 +25,9 @@ from app.contracts import AssetState, FaultType, SensorQuality, Telemetry
 from app.simulation import SimulationSession
 
 DT = 0.1
-DUTY_FLOW_LPM = 21.0
+DUTY_FLOW_LPM = 115.52
+#: Absolute flow tolerance, sized to FT-101's noise rather than guessed.
+FLOW_TOL_LPM = 2.75
 
 
 def run(session: SimulationSession, seconds: float, dt: float = DT) -> list[Telemetry]:
@@ -48,10 +58,10 @@ def test_healthy_duty_run_raises_no_alarms_for_60_seconds():
     assert session.alarm_history == []
 
     steady = frames[-1]
-    assert steady.flow_lpm == pytest.approx(DUTY_FLOW_LPM, abs=0.5)
+    assert steady.flow_lpm == pytest.approx(DUTY_FLOW_LPM, abs=FLOW_TOL_LPM)
     assert steady.pump_head_m == pytest.approx(7.59, abs=0.1)
-    assert steady.motor_current_a == pytest.approx(0.671, abs=0.02)
-    assert steady.pump_efficiency == pytest.approx(0.419, abs=0.01)
+    assert steady.motor_current_a == pytest.approx(2.165, abs=0.11)
+    assert steady.pump_efficiency == pytest.approx(0.486, abs=0.01)
     assert steady.npsh_margin_m > 5.0
     assert steady.fault_state == FaultType.NORMAL.value
     assert steady.health_index == pytest.approx(100.0, abs=0.5)
@@ -90,11 +100,11 @@ def test_clearing_a_fault_ramps_back_to_healthy():
     session = started("recovery")
     session.inject_fault(FaultType.FLOW_RESTRICTION.value, 1.0, ramp_s=4.0)
     run(session, 40.0)
-    assert session.last_telemetry.flow_lpm < 8.0
+    assert session.last_telemetry.flow_lpm < 44.0
 
     session.clear_fault(ramp_s=4.0)
     frames = run(session, 40.0)
-    assert frames[-1].flow_lpm == pytest.approx(DUTY_FLOW_LPM, abs=0.6)
+    assert frames[-1].flow_lpm == pytest.approx(DUTY_FLOW_LPM, abs=3.3)
     assert frames[-1].fault_state == FaultType.NORMAL.value
 
 
@@ -116,7 +126,7 @@ def test_dry_run_raises_temperature_and_unloads_the_motor():
     # Losing the liquid unloads the motor. Current falling, not rising, is the
     # electrical signature of a dry run.
     assert after.motor_current_a < before.motor_current_a - 0.05
-    assert after.flow_lpm < 2.0
+    assert after.flow_lpm < 11.0
     assert after.fault_state == FaultType.DRY_RUN.value
 
 
@@ -181,7 +191,7 @@ def test_frozen_flow_transmitter_is_flagged_but_the_process_is_untouched():
 
     # ... and the pump is doing exactly what it was doing before.
     assert session.truth["flow_lpm"] == pytest.approx(true_flow_before, rel=0.01)
-    assert session.truth["motor_current_a"] == pytest.approx(0.671, abs=0.02)
+    assert session.truth["motor_current_a"] == pytest.approx(2.165, abs=0.02)
     assert session.state == AssetState.RUNNING.value
     assert frames[-1].fault_state == FaultType.SENSOR_FAULT.value
 
@@ -228,7 +238,7 @@ def test_two_sessions_do_not_interfere():
     assert b.state == AssetState.RUNNING.value
     assert b.last_telemetry.fault_state == FaultType.NORMAL.value
     assert b.last_telemetry.npsh_margin_m > 5.0
-    assert b.last_telemetry.flow_lpm == pytest.approx(DUTY_FLOW_LPM, abs=0.5)
+    assert b.last_telemetry.flow_lpm == pytest.approx(DUTY_FLOW_LPM, abs=FLOW_TOL_LPM)
     assert b.alarms == []
 
 
@@ -244,9 +254,9 @@ def test_sessions_have_independent_valve_and_speed_setpoints():
     # A throttled at full speed; B at reduced speed with the valve untouched.
     assert a.valve_opening == 0.35 and b.valve_opening == 1.0
     assert a.last_telemetry.rpm == pytest.approx(1450.0, abs=5.0)
-    assert a.last_telemetry.flow_lpm < DUTY_FLOW_LPM - 1.5
+    assert a.last_telemetry.flow_lpm < DUTY_FLOW_LPM - 8.25
     assert b.last_telemetry.rpm == pytest.approx(1100.0, abs=5.0)
-    assert b.last_telemetry.flow_lpm < DUTY_FLOW_LPM - 1.5
+    assert b.last_telemetry.flow_lpm < DUTY_FLOW_LPM - 8.25
     assert a.last_telemetry.flow_lpm != b.last_telemetry.flow_lpm
 
 
@@ -347,18 +357,22 @@ def test_differential_pressure_matches_the_two_transmitters():
 
 
 def test_mechanical_faults_show_in_the_expected_vibration_order():
-    """Severity 0.9, not 1.0.
+    """Severity 0.7, not 1.0.
 
-    The vibration trip is now derived from ISO 20816-1's operational-limit rule
-    (1.25 x the zone C upper limit = 5.625 mm/s) rather than from a sourceless
-    18.0, and a fully developed imbalance takes this machine past it: severity
-    0.9 settles at 5.55 mm/s and runs, severity 1.0 trips. This test is about
-    WHERE the energy appears, so it is run at the highest severity the machine
-    survives; that the machine does not survive 1.0 is asserted separately
-    below, because it is protection working rather than a limitation.
+    The vibration trip is the ISO 20816-1 Class I zone C/D boundary itself,
+    4.50 mm/s, and a developed imbalance takes this machine past it: severity
+    0.7 settles at 4.42 mm/s and runs, severity 0.8 trips. This test is about
+    WHERE the energy appears, so it is run at close to the highest severity the
+    machine survives; that the machine does not survive a fully developed
+    imbalance is asserted separately below, because it is protection working
+    rather than a limitation.
+
+    The severity moved from 0.9 to 0.7 when the trip moved down from a
+    sourceless 1.25 x C/D to the C/D boundary itself. That is the test tracking
+    the protection, not the protection being loosened to suit the test.
     """
     imbalance = started("imbalance")
-    imbalance.inject_fault(FaultType.IMBALANCE.value, 0.9, ramp_s=4.0)
+    imbalance.inject_fault(FaultType.IMBALANCE.value, 0.7, ramp_s=4.0)
     frames = run(imbalance, 40.0)
     healthy_1x = 0.55
     assert frames[-1].asset_state == AssetState.RUNNING.value
@@ -366,7 +380,7 @@ def test_mechanical_faults_show_in_the_expected_vibration_order():
     assert frames[-1].amplitude_1x_mm_s > frames[-1].amplitude_2x_mm_s
 
     misalignment = started("misalignment")
-    misalignment.inject_fault(FaultType.MISALIGNMENT.value, 0.9, ramp_s=4.0)
+    misalignment.inject_fault(FaultType.MISALIGNMENT.value, 0.7, ramp_s=4.0)
     frames = run(misalignment, 40.0)
     # Misalignment lives at 2x and in the axial direction.
     assert frames[-1].amplitude_2x_mm_s > frames[-1].amplitude_1x_mm_s
@@ -379,8 +393,8 @@ def test_a_fully_developed_imbalance_trips_the_machine():
 
     It used to be 18.0 mm/s, four times the zone C/D boundary and citable to
     nothing, so no mechanical fault this simulator can produce ever reached it
-    and the interlock was decorative. At 1.25 x zone C the protection actually
-    protects.
+    and the interlock was decorative. At the C/D boundary the protection
+    actually protects.
     """
     session = started("imbalance-trip")
     session.inject_fault(FaultType.IMBALANCE.value, 1.0, ramp_s=4.0)

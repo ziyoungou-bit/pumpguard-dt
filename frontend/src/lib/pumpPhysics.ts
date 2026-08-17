@@ -31,13 +31,14 @@
 export {
   ASSET_TAGS,
   BEARING,
+  BEP_HEAD_M,
   CIRCUIT,
   FLUID,
   HEAD_COEFFICIENT,
   LPM_PER_M3S,
   MOTOR,
   PUMP,
-  SPECIFIC_SPEED_NQ,
+  SPECIFIC_SPEED_NS,
   THERMAL,
 } from './pumpParameters.generated'
 
@@ -123,7 +124,7 @@ export function operatingFlowLpm(speedRpm: number, valveOpening: number): number
  * sitting, not of how many litres per minute are coming out. Dividing the
  * absolute flow back to rated speed is exactly the "where on its own curve"
  * coordinate. Looking eta up on absolute flow instead nails the BEP to a fixed
- * 22 L/min, so at half speed the pump is reported as running far off BEP when
+ * 121 L/min, so at half speed the pump is reported as running far off BEP when
  * it is in fact sitting precisely on it.
  *
  * The parabola is the standard one: it vanishes at Q = 0 and at Q = 2 Q_BEP,
@@ -141,17 +142,92 @@ export function pumpEfficiency(flowLpm: number, speedRpm: number): number {
   return Math.max(0, PUMP.bep_efficiency * (2 * x - x * x))
 }
 
+/**
+ * Coefficient C of the Annex III minimum-efficiency correlation, for the one
+ * machine class this asset belongs to: ESOB (end-suction own-bearing), 1450
+ * rpm, MEI >= 0.40. The regulation tabulates a different C for every
+ * (type, speed, MEI) combination; only the applicable one is written down here,
+ * because a table of the others would be eight numbers this project never uses.
+ *
+ * Source: Commission Regulation (EU) No 547/2012, Annex III.
+ * OJ L 165/34, 26.6.2012.
+ */
+export const ANNEX_III_C_ESOB_1450_MEI_040 = 128.07
+
+/** Term-by-term evaluation of the Annex III correlation, for display. */
+export interface MinimumEfficiencyTerms {
+  /** ln(n_s), with n_s computed from Q in m^3/s. */
+  x: number
+  /** ln(Q_BEP in m^3/h). NOT the same flow unit as x. See below. */
+  y: number
+  /** eta_BEP,min as a fraction, 0..1. */
+  efficiency: number
+}
+
+/**
+ * (eta_BEP)min,requ from Commission Regulation (EU) No 547/2012, Annex III:
+ *
+ *     eta % = 88.59 x + 13.46 y - 11.48 x^2 - 0.85 y^2 - 0.38 x y - C
+ *     x = ln(n_s)        y = ln(Q_BEP in m^3/h)
+ *
+ * UNIT TRAP, and it is the regulation's own rather than a slip here: n_s is
+ * defined with Q in m^3/s, while y is the natural log of Q in m^3/h. The two
+ * flows are therefore passed in separately and must never be folded into one
+ * argument -- unifying them moves the answer by about 14 points.
+ *
+ * This is a MINIMUM efficiency, not a measured one. Using it as the modelled
+ * eta_BEP is the deliberate choice this project makes instead of inventing a
+ * catalogue figure: it is externally sourced, it is reproducible from the
+ * geometry already fixed elsewhere, and it errs conservatively.
+ */
+export function annexIIIMinimumEfficiency(
+  specificSpeedNs: number,
+  bepFlowM3h: number,
+): MinimumEfficiencyTerms {
+  const x = Math.log(specificSpeedNs)
+  const y = Math.log(bepFlowM3h)
+  const percent =
+    88.59 * x +
+    13.46 * y -
+    11.48 * x * x -
+    0.85 * y * y -
+    0.38 * x * y -
+    ANNEX_III_C_ESOB_1450_MEI_040
+  return { x, y, efficiency: percent / 100 }
+}
+
+/**
+ * The part-load and overload points of Annex I, and the derating the regulation
+ * allows at each. A pump must reach 0.947 of its BEP minimum at 75 % of BEP
+ * flow and 0.985 of it at 110 %.
+ *
+ * They are here to be checked AGAINST this site's efficiency model, not to feed
+ * it: eta(Q)/eta_BEP = 2x - x^2 was chosen as a curve shape long before the
+ * regulation entered this project, so the agreement between the two is
+ * evidence rather than construction. See the Pump Performance page.
+ */
+export const ANNEX_I_PART_LOAD = { flowFraction: 0.75, efficiencyFactor: 0.947 } as const
+export const ANNEX_I_OVERLOAD = { flowFraction: 1.1, efficiencyFactor: 0.985 } as const
+
 /** P_hyd = rho * g * Q * H, watts. */
 export function hydraulicPowerW(flowM3s: number, headM: number): number {
   return FLUID.density * FLUID.gravity * flowM3s * headM
 }
 
-/** Shaft power = hydraulic / pump efficiency, plus parasitic drag. */
-export function shaftPowerW(hydraulicW: number, efficiency: number, speedRpm: number): number {
-  const speedRatio = speedRpm / MOTOR.rated_speed_rpm
-  const parasitic = MOTOR.parasitic_loss_at_rated_w * Math.pow(Math.max(0, speedRatio), 3)
-  if (efficiency <= 0) return parasitic
-  return hydraulicW / efficiency + parasitic
+/**
+ * Shaft power = hydraulic power / OVERALL pump efficiency.
+ *
+ *     P_shaft = P_hyd / eta_pump
+ *
+ * eta_pump is the overall pump efficiency of Commission Regulation (EU) No
+ * 547/2012 Annex I(4): hydraulic power out over shaft power in. Disc friction,
+ * wear-ring leakage and mechanical loss are already inside that denominator.
+ * This function used to add a separate parasitic drag term on top, which
+ * counted the same losses a second time.
+ */
+export function shaftPowerW(hydraulicW: number, efficiency: number): number {
+  if (efficiency <= 0) return 0
+  return hydraulicW / efficiency
 }
 
 /** Electrical input = shaft / motor efficiency. */
@@ -159,11 +235,20 @@ export function electricalPowerW(shaftW: number): number {
   return shaftW / MOTOR.efficiency
 }
 
-/** Single-phase line current implied by the electrical power. */
+/**
+ * Single-phase line current implied by the electrical power.
+ *
+ *     I = P_elec / (V * pf)
+ *
+ * One formula, no floor. This port used to floor the result at a magnetising
+ * current while the backend added that current in quadrature, so the two
+ * halves reported different currents at every operating point -- and the
+ * Engineering page printed this quotient as its label while displaying the
+ * backend's quadrature value, so the arithmetic on screen did not close.
+ */
 export function motorCurrentA(electricalW: number): number {
-  const denominator = MOTOR.rated_voltage_v * MOTOR.power_factor
-  const load = electricalW / denominator
-  return Math.max(MOTOR.no_load_current_a, load)
+  if (electricalW <= 0) return 0
+  return electricalW / (MOTOR.rated_voltage_v * MOTOR.power_factor)
 }
 
 /** Rotational frequency, Hz. The single most used derived quantity. */
@@ -265,7 +350,7 @@ export function solveOperatingPoint(
   const headM = pumpHead(flowM3s, speedRpm)
   const efficiency = pumpEfficiency(flowLpm, speedRpm)
   const hydraulic = hydraulicPowerW(flowM3s, headM)
-  const shaft = shaftPowerW(hydraulic, efficiency, speedRpm)
+  const shaft = shaftPowerW(hydraulic, efficiency)
   const electrical = electricalPowerW(shaft)
   return {
     flow_lpm: flowLpm,
@@ -372,7 +457,7 @@ export function curveSeries(
       system_head_m: Number(systemHead(flowM3s, valveOpening).toFixed(3)),
       pump_efficiency: Number((efficiency * 100).toFixed(2)),
       hydraulic_power_w: Number(hydraulic.toFixed(2)),
-      shaft_power_w: Number(shaftPowerW(hydraulic, efficiency, speedRpm).toFixed(2)),
+      shaft_power_w: Number(shaftPowerW(hydraulic, efficiency).toFixed(2)),
       npsh_available_m: Number(npshAvailableM(flowM3s, suctionRestriction).toFixed(3)),
       npsh_required_m: Number(npshRequiredM(flowLpm, speedRpm).toFixed(3)),
     })

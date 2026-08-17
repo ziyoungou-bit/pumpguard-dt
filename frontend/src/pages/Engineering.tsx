@@ -18,7 +18,7 @@ import {
   HEAD_COEFFICIENT,
   MOTOR,
   PUMP,
-  SPECIFIC_SPEED_NQ,
+  SPECIFIC_SPEED_NS,
   bladePassFrequencyHz,
   lpmToM3s,
   npshAvailableM,
@@ -65,7 +65,7 @@ export function Engineering() {
     shaft_rpm: telemetry.rpm,
   })
 
-  const e = (value: number) => `${(value / 1e7).toFixed(3)}e7`
+  const e = (value: number) => `${(value / 1e6).toFixed(3)}e6`
 
   return (
     <div className="space-y-5">
@@ -101,15 +101,15 @@ export function Engineering() {
               where="Useful power delivered to the liquid."
             />
             <Formula
-              expression={`P_shaft = P_hyd / eta_pump + P_parasitic = ${fmt(telemetry.hydraulic_power_w, 2)} / ${fmt(telemetry.pump_efficiency, 3)} + drag = ${fmt(telemetry.shaft_power_w, 2)} W`}
-              where={`Parasitic drag (bearings, seal, windage) is ${MOTOR.parasitic_loss_at_rated_w} W at rated speed and scales with N^3.`}
+              expression={`P_shaft = P_hyd / eta_pump = ${fmt(telemetry.hydraulic_power_w, 2)} / ${fmt(telemetry.pump_efficiency, 3)} = ${fmt(telemetry.shaft_power_w, 2)} W`}
+              where="eta_pump is the OVERALL pump efficiency of EU 547/2012 Annex I(4): hydraulic power out over shaft power in. Disc friction, wear-ring leakage and mechanical loss are already inside that denominator. A separate parasitic drag term used to be added here, which charged the same losses twice."
             />
             <Formula
               expression={`P_elec = P_shaft / eta_motor = ${fmt(telemetry.shaft_power_w, 2)} / ${MOTOR.efficiency} = ${fmt(telemetry.electrical_power_w, 2)} W`}
             />
             <Formula
               expression={`I = P_elec / (V x PF) = ${fmt(telemetry.electrical_power_w, 2)} / (${MOTOR.rated_voltage_v} x ${MOTOR.power_factor}) = ${fmt(telemetry.motor_current_a, 3)} A`}
-              where={`Floored at the magnetising current of ${MOTOR.no_load_current_a} A -- a motor draws current with no mechanical load at all.`}
+              where="One formula, no floor and no quadrature term. The magnetising current used to be added in quadrature on the backend and applied as a floor in the browser, so the two halves reported different currents and the arithmetic printed on this line did not close."
             />
           </div>
         </Card>
@@ -117,8 +117,8 @@ export function Engineering() {
         <Card title="Efficiency and NPSH">
           <div className="space-y-3">
             <Formula
-              expression={`Q_red = Q N_rated / N = ${fmt(telemetry.flow_lpm, 2)} x ${PUMP.rated_speed_rpm} / ${fmt(telemetry.rpm, 0)} = ${fmt(reducedFlowLpm, 2)} L/min\nx = Q_red / Q_BEP = ${fmt(reducedFlowLpm, 2)} / ${PUMP.bep_flow_lpm} = ${fmt(x, 4)}\neta(Q) = eta_BEP [ 2x - x^2 ] = ${PUMP.bep_efficiency} x [ 2(${fmt(x, 4)}) - ${fmt(x, 4)}^2 ] = ${fmt(telemetry.pump_efficiency * 100, 2)} %`}
-              where={`n_q = N sqrt(Q) / H^0.75 = ${fmt(SPECIFIC_SPEED_NQ, 2)} at the rated duty point, which is why eta_BEP is ${fmt(PUMP.bep_efficiency * 100, 0)} % and not the 60-70 % of a mid-n_q machine.`}
+              expression={`Q_red = Q N_rated / N = ${fmt(telemetry.flow_lpm, 2)} x ${PUMP.rated_speed_rpm} / ${fmt(telemetry.rpm, 0)} = ${fmt(reducedFlowLpm, 2)} L/min\nx = Q_red / Q_BEP = ${fmt(reducedFlowLpm, 2)} / ${PUMP.bep_flow_lpm} = ${fmt(x, 4)}\neta(Q) = eta_BEP [ 2x - x^2 ] = ${fmt(PUMP.bep_efficiency, 4)} x [ 2(${fmt(x, 4)}) - ${fmt(x, 4)}^2 ] = ${fmt(telemetry.pump_efficiency * 100, 2)} %`}
+              where={`eta_BEP is not a figure chosen for this machine. n_s = N sqrt(Q_BEP) / H_BEP^0.75 = ${fmt(SPECIFIC_SPEED_NS, 3)}, and the minimum-efficiency correlation of Commission Regulation (EU) No 547/2012 Annex III evaluated at that n_s returns ${fmt(PUMP.bep_efficiency * 100, 2)} %. The Pump Performance page shows the evaluation term by term.`}
               note="Efficiency is looked up on the REDUCED flow, not the absolute flow. Affinity laws map every point on the characteristic onto a homologous point at another speed with eta invariant, so what fixes efficiency is where the pump sits on its own curve -- and Q N_rated / N is exactly that coordinate. The parabola vanishes at Q = 0 and at 2 Q_BEP; it has no width parameter and no floor."
             />
             <Formula

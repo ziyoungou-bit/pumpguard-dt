@@ -173,18 +173,22 @@ export function Dashboard() {
             value={fmt(telemetry.motor_temperature_c, 1)}
             unit="degC"
             tag={ASSET_TAGS.motor_temperature}
-            // TODO(RECONCILE): shows 70/78, source says
-            // ALARM_LIMITS.motor_temperature_high.warning/alarm = 65/75.
-            status={limitStatus(telemetry.motor_temperature_c, 70, 78)}
+            status={limitStatus(
+              telemetry.motor_temperature_c,
+              ALARM_LIMITS.motor_temperature_high.warning,
+              ALARM_LIMITS.motor_temperature_high.alarm
+            )}
           />
           <StatTile
             label="Bearing temperature"
             value={fmt(telemetry.bearing_temperature_c, 1)}
             unit="degC"
             tag={ASSET_TAGS.bearing_temperature}
-            // TODO(RECONCILE): shows 55/62, source says
-            // ALARM_LIMITS.bearing_temperature_high.warning/alarm = 55/65.
-            status={limitStatus(telemetry.bearing_temperature_c, 55, 62)}
+            status={limitStatus(
+              telemetry.bearing_temperature_c,
+              ALARM_LIMITS.bearing_temperature_high.warning,
+              ALARM_LIMITS.bearing_temperature_high.alarm
+            )}
           />
           <StatTile
             label="Vibration RMS"

@@ -23,11 +23,16 @@
 import { useMemo, useState } from 'react'
 import { useAppState } from '../state/AppState'
 import {
+  ANNEX_III_C_ESOB_1450_MEI_040,
+  ANNEX_I_OVERLOAD,
+  ANNEX_I_PART_LOAD,
+  BEP_HEAD_M,
   CIRCUIT,
   CURVE_MAX_FLOW_LPM,
   MOTOR,
   PUMP,
-  SPECIFIC_SPEED_NQ,
+  SPECIFIC_SPEED_NS,
+  annexIIIMinimumEfficiency,
   bepFlowLpm,
   cavitationOnsetFlowLpm,
   curveSeries,
@@ -35,12 +40,13 @@ import {
   motorSlip,
   npshAvailableM,
   npshRequiredM,
+  pumpEfficiency,
   runoutFlowLpm,
   solveOperatingPoint,
   systemResistance,
 } from '../lib/pumpPhysics'
 import { fmt, fmtUnit } from '../lib/format'
-import { Card, DefinitionRow, Notice, PageHeading, RangeSlider, StatTile } from '../components/ui'
+import { Card, DefinitionRow, Formula, Notice, PageHeading, RangeSlider, StatTile } from '../components/ui'
 import {
   EfficiencyCurveChart,
   NpshCurveChart,
@@ -92,6 +98,66 @@ export function PumpPerformance() {
 
   const flowDeviationPct = bepFlow > 0 ? ((point.flow_lpm - bepFlow) / bepFlow) * 100 : 0
 
+  // -- Commission Regulation (EU) No 547/2012, evaluated here ----------------
+  //
+  // The rated point is solved separately from the page's sliders because the
+  // regulation's scope criteria are written against the RATED duty, not against
+  // whatever the operator is currently sweeping the speed to.
+  const ratedPoint = useMemo(() => solveOperatingPoint(PUMP.rated_speed_rpm, 1), [])
+  const bepFlowM3h = (PUMP.bep_flow_lpm * 60) / 1000
+  const ratedFlowM3h = (PUMP.duty_flow_lpm * 60) / 1000
+  const annexIII = annexIIIMinimumEfficiency(SPECIFIC_SPEED_NS, bepFlowM3h)
+
+  /**
+   * Article 2(2) and 2(3) scope criteria. Every one of them is stated in terms
+   * of the RATED flow -- substituting the BEP flow here would be reading the
+   * regulation's own definitions off the wrong point, and at 1.1 x duty it
+   * would pass a machine the criterion was meant to catch.
+   */
+  const scopeChecks = [
+    {
+      criterion: 'Specific speed n_s between 6 and 80',
+      value: fmt(SPECIFIC_SPEED_NS, 3),
+      ok: SPECIFIC_SPEED_NS >= 6 && SPECIFIC_SPEED_NS <= 80,
+    },
+    {
+      criterion: 'Rated flow at least 6 m3/h',
+      value: `${fmt(ratedFlowM3h, 3)} m3/h`,
+      ok: ratedFlowM3h >= 6,
+    },
+    {
+      criterion: 'Shaft power at most 150 kW',
+      value: `${fmt(ratedPoint.shaft_power_w, 0)} W`,
+      ok: ratedPoint.shaft_power_w <= 150_000,
+    },
+    {
+      criterion: 'Head at most 90 m at 1450 rpm',
+      value: `${fmt(ratedPoint.pump_head_m, 2)} m`,
+      ok: ratedPoint.pump_head_m <= 90,
+    },
+  ]
+
+  /**
+   * The part-load and overload cross-check.
+   *
+   * The regulation requires a pump to hold 0.947 of its BEP minimum at 75 % of
+   * BEP flow and 0.985 of it at 110 %. This site's efficiency model is the
+   * parabola eta/eta_BEP = 2x - x^2, chosen as a curve SHAPE for reasons that
+   * have nothing to do with 547/2012. Both ratios are computed rather than
+   * written down, so the comparison stays honest if either side changes.
+   */
+  const partLoadCheck = [ANNEX_I_PART_LOAD, ANNEX_I_OVERLOAD].map((annex) => {
+    const modelled =
+      pumpEfficiency(annex.flowFraction * PUMP.bep_flow_lpm, PUMP.rated_speed_rpm) /
+      PUMP.bep_efficiency
+    return {
+      label: `${fmt(annex.flowFraction * 100, 0)} % of BEP flow`,
+      regulation: annex.efficiencyFactor,
+      modelled,
+      deltaPoints: (modelled - annex.efficiencyFactor) * 100,
+    }
+  })
+
   return (
     <div className="space-y-5">
       <PageHeading
@@ -105,17 +171,17 @@ export function PumpPerformance() {
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatTile
-            label="Specific speed n_q"
-            value={fmt(SPECIFIC_SPEED_NQ, 1)}
+            label="Specific speed n_s"
+            value={fmt(SPECIFIC_SPEED_NS, 2)}
             unit=""
-            tag="N sqrt(Q) / H^0.75"
-            hint="Low specific speed"
+            tag="N sqrt(Q_BEP) / H_BEP^0.75"
+            hint={`at the BEP, not the duty point`}
           />
           <StatTile
             label="Peak efficiency"
-            value={fmt(PUMP.bep_efficiency * 100, 0)}
+            value={fmt(PUMP.bep_efficiency * 100, 2)}
             unit="%"
-            tag="eta_BEP"
+            tag="EU 547/2012 Annex III"
             hint={`at ${fmt(bepFlow, 1)} L/min`}
           />
           <StatTile
@@ -132,16 +198,65 @@ export function PumpPerformance() {
             hint={`at ${fmt(speedRpm, 0)} rpm`}
           />
         </div>
+        <Formula
+          expression={
+            `n_s = N sqrt(Q_BEP) / (H_BEP / i)^0.75 = ${fmt(PUMP.rated_speed_rpm, 0)} x sqrt(` +
+            `${lpmToM3s(PUMP.bep_flow_lpm).toExponential(3)}) / ${fmt(BEP_HEAD_M, 3)}^0.75 = ` +
+            `${fmt(SPECIFIC_SPEED_NS, 3)}   [Q in m3/s, i = 1]\n` +
+            `x = ln(n_s) = ${fmt(annexIII.x, 4)}\n` +
+            `y = ln(Q_BEP) = ln(${fmt(bepFlowM3h, 3)}) = ${fmt(annexIII.y, 4)}   [Q in m3/h]\n` +
+            `(eta_BEP)min,requ = 88.59x + 13.46y - 11.48x^2 - 0.85y^2 - 0.38xy - C\n` +
+            `                  = ${fmt(annexIII.efficiency * 100, 2)} %   [C = ${ANNEX_III_C_ESOB_1450_MEI_040}, ESOB, 1450 rpm, MEI >= 0.40]`
+          }
+          where="Commission Regulation (EU) No 547/2012, Annex III. OJ L 165/34, 26.6.2012."
+          note="Note the unit trap, which is the regulation's and not this page's: n_s is defined with Q in m3/s while y is the natural log of Q in m3/h. The two flows are named separately above and are never folded into one variable -- unifying them moves eta_BEP by about 14 points. What this correlation returns is a MINIMUM efficiency, not a measured one; using it as the modelled eta_BEP is the deliberate alternative to inventing a catalogue figure, and it errs on the conservative side."
+        />
+        <div className="mt-4">
+          <h4 className="text-xs font-semibold tracking-wide text-slate-700 uppercase">
+            Scope of the regulation, checked rather than assumed
+          </h4>
+          <p className="mt-1 text-xs text-slate-500">
+            Article 2(2) and 2(3). Each criterion is stated against the RATED flow, so that is what
+            is tested here -- substituting the BEP flow, which is 10 % higher, would read the
+            regulation's own definitions off the wrong point.
+          </p>
+          <dl className="mt-2">
+            {scopeChecks.map((check) => (
+              <DefinitionRow
+                key={check.criterion}
+                label={check.criterion}
+                value={`${check.value}  ${check.ok ? 'OK' : 'OUT OF SCOPE'}`}
+              />
+            ))}
+          </dl>
+        </div>
+      </Card>
+
+      <Card
+        title="Part-load and overload, cross-checked against the regulation"
+        subtitle="Two independent statements about the same curve"
+      >
+        <p className="text-xs text-slate-500">
+          Annex I also fixes what a compliant pump must reach away from its best point: 0.947 of the
+          BEP minimum at {fmt(ANNEX_I_PART_LOAD.flowFraction * 100, 0)} % of BEP flow, and 0.985 of
+          it at {fmt(ANNEX_I_OVERLOAD.flowFraction * 100, 0)} %. This site models efficiency as the
+          parabola eta(Q)/eta_BEP = 2x - x^2, a curve SHAPE chosen for reasons that have nothing to
+          do with 547/2012 -- it vanishes at Q = 0 and at 2 Q_BEP and has no free parameter to tune.
+        </p>
+        <dl className="mt-3">
+          {partLoadCheck.map((row) => (
+            <DefinitionRow
+              key={row.label}
+              label={row.label}
+              value={`model ${fmt(row.modelled, 4)} vs regulation ${fmt(row.regulation, 3)}  (${row.deltaPoints >= 0 ? '+' : ''}${fmt(row.deltaPoints, 1)} points)`}
+            />
+          ))}
+        </dl>
         <p className="mt-3 text-xs text-slate-500">
-          n_q = N sqrt(Q) / H^0.75 = {fmt(PUMP.rated_speed_rpm, 0)} x sqrt(
-          {(PUMP.duty_flow_lpm / 60000).toExponential(3)}) / {PUMP.duty_head_m}^0.75 ={' '}
-          {fmt(SPECIFIC_SPEED_NQ, 2)}, computed live from the rated duty point. Conventional
-          centrifugal impellers sit at n_q 10-80. Below about 10 the impeller passage is so narrow
-          that disc friction on the shroud faces and leakage past the wear ring dominate the loss
-          budget, and measured peak efficiency for this size and shape falls in the 35-45 % band.
-          That correlation -- not a catalogue lookup -- is what sets eta_BEP ={' '}
-          {fmt(PUMP.bep_efficiency * 100, 0)} %. A 62 % figure here would understate shaft power by
-          about a third and carry that error straight into motor loading and the thermal model.
+          The parabola reproduces both of the regulation's derating factors to within one point,
+          having been picked with no reference to them. That agreement is evidence the curve shape
+          is the right one, not a result of fitting it -- and it is the reason the same parabola is
+          trusted at operating points the regulation says nothing about.
         </p>
       </Card>
 
@@ -251,7 +366,7 @@ export function PumpPerformance() {
             <dl className="mt-4">
               <DefinitionRow
                 label="System resistance K"
-                value={`${(systemResistance(valveOpening) / 1e7).toFixed(2)}e7 m/(m3/s)2`}
+                value={`${(systemResistance(valveOpening) / 1e6).toFixed(3)}e6 m/(m3/s)2`}
               />
               <DefinitionRow
                 label="Static head H_static"
@@ -347,8 +462,8 @@ export function PumpPerformance() {
             label="Shaft power"
             value={fmt(point.shaft_power_w, 1)}
             unit="W"
-            tag="P_hyd / eta + drag"
-            hint={`${fmt(point.pump_efficiency > 0 ? point.hydraulic_power_w / point.pump_efficiency : 0, 1)} W hydraulic + ${fmt(MOTOR.parasitic_loss_at_rated_w * Math.pow(speedRpm / MOTOR.rated_speed_rpm, 3), 1)} W drag`}
+            tag="P_hyd / eta_pump"
+            hint={`eta_pump is the overall pump efficiency of EU 547/2012 Annex I(4): disc friction, leakage and mechanical loss are already inside it, so nothing is added on top.`}
           />
           <StatTile
             label="Electrical power"
@@ -360,7 +475,7 @@ export function PumpPerformance() {
             label="Motor current"
             value={fmt(point.motor_current_a, 3)}
             unit="A"
-            tag="sqrt(I_mag^2 + I_load^2)"
+            tag="P_elec / (V x PF)"
           />
         </div>
       </Card>

@@ -43,6 +43,13 @@ from ..config.pump_parameters import (
 
 LPM_PER_M3S = 60000.0
 
+#: Shaft power a dry-running pump still absorbs, as a fraction of the wetted
+#: duty shaft power. An impeller spinning in air churns and windmills but
+#: carries no hydraulic load, so the motor unloads to roughly a fifth of duty.
+#: Expressed as a fraction rather than as watts so that it follows the duty
+#: point instead of having to be retuned whenever the machine is rescaled.
+DRY_RUN_SHAFT_POWER_FRACTION = 0.20
+
 
 def lpm_to_m3s(flow_lpm: float) -> float:
     return flow_lpm / LPM_PER_M3S
@@ -50,6 +57,18 @@ def lpm_to_m3s(flow_lpm: float) -> float:
 
 def m3s_to_lpm(flow_m3s: float) -> float:
     return flow_m3s * LPM_PER_M3S
+
+
+def duty_shaft_power_w(
+    motor: MotorParameters = MOTOR, pump: PumpParameters = PUMP
+) -> float:
+    """Shaft power at the rated duty point. The reference the dry-run and the
+    thermal load fraction are both taken against, so neither carries a watt
+    figure of its own."""
+    duty_flow_m3s = lpm_to_m3s(pump.duty_flow_lpm)
+    hydraulic = FLUID.density * FLUID.gravity * duty_flow_m3s * pump.duty_head_m
+    efficiency = pump_efficiency(pump.duty_flow_lpm, pump.rated_speed_rpm, pump)
+    return hydraulic / efficiency if efficiency > 0.0 else 0.0
 
 
 # --------------------------------------------------------------------------
@@ -219,24 +238,29 @@ def _shaft_power(
     motor: MotorParameters,
     pump: PumpParameters,
 ) -> float:
-    """Shaft power = hydraulic power / pump efficiency, plus parasitic losses.
+    """Shaft power = hydraulic power / OVERALL pump efficiency.
 
-    The parasitic term matters: at zero flow the hydraulic power is zero, but a
-    real pump still absorbs power churning liquid and turning bearings and
-    seals. Without it a closed-valve or dry-run condition would report zero
-    shaft power and zero motor current, which is wrong and would make the
-    dry-run fault undetectable on the electrical signal.
+        P_shaft = P_hyd / eta_pump
+
+    eta_pump here is the overall pump efficiency as Commission Regulation (EU)
+    No 547/2012 Annex I(4) defines it: hydraulic power out over shaft power in.
+    Disc friction, wear-ring leakage and mechanical loss are already inside
+    that denominator. This function previously added a separate parasitic drag
+    term on top, which counted those same losses twice.
+
+    Dry run. With no liquid the hydraulic load disappears and the motor
+    unloads -- current falls rather than rises, which is the electrical
+    signature the dry-run diagnosis keys on. That residual load is the churning
+    and windage of an impeller spinning in air, taken as a fraction of the
+    wetted duty shaft power rather than as a constant, so it scales with the
+    machine instead of having to be re-tuned whenever the duty point moves.
     """
-    speed_ratio = speed_rpm / pump.rated_speed_rpm
-    # Windage and friction scale roughly with speed cubed.
-    parasitic = motor.parasitic_loss_at_rated_w * speed_ratio**3
     if dry_run:
-        # No liquid: hydraulic load disappears, so the motor unloads. This is
-        # the electrical signature of a dry run -- current falls rather than rises.
-        return parasitic * 0.75
+        speed_ratio = max(0.0, speed_rpm) / pump.rated_speed_rpm
+        return DRY_RUN_SHAFT_POWER_FRACTION * duty_shaft_power_w(motor, pump) * speed_ratio**3
     if efficiency <= 0.0 or hydraulic_power_w <= 0.0:
-        return parasitic
-    return hydraulic_power_w / efficiency + parasitic
+        return 0.0
+    return hydraulic_power_w / efficiency
 
 
 def pump_efficiency(flow_lpm: float, speed_rpm: float, pump: PumpParameters = PUMP) -> float:
@@ -279,25 +303,26 @@ def motor_current(electrical_power_w: float, motor: MotorParameters = MOTOR) -> 
         P = V * I * pf            (single phase)
         P = sqrt(3) * V * I * pf  (three phase)
 
-    Magnetising and load current are combined in quadrature, not by taking the
-    larger of the two:
+    Rearranged: I = P_elec / (V * pf). One formula, no floor and no quadrature
+    correction.
 
-        I_total = sqrt(I_magnetising^2 + I_load^2)
-
-    In an induction motor the magnetising component lags the voltage by ~90
-    degrees while the load component is nearly in phase, so they add as vectors.
-    A max() floor was used first and it made current constant at every hydraulic
-    condition -- the load component sat below the floor at all times, so current
-    reported nothing about flow, blockage or dry running. Since current is one
-    of the diagnostic inputs, that silently removed a whole sensor from the
-    fault model.
+    Both of those were here before and both were wrong for this model. A max()
+    floor at the magnetising current made current constant at every hydraulic
+    condition, silently removing a diagnostic sensor. Adding the magnetising
+    component in quadrature was the fix for that, and it is the right physics
+    for a real induction motor -- but the magnetising current it needed was a
+    nameplate quantity this model never had a source for, and the frontend
+    implemented the floor while the backend implemented the quadrature, so the
+    two halves disagreed about the current at every operating point. What the
+    model does have a source for is the power chain, and P_elec / (V * pf) is
+    exactly the relationship the Engineering page prints. Current is now that
+    quotient in both languages and nothing else.
     """
     if electrical_power_w <= 0.0:
         return 0.0
     root_three = math.sqrt(3.0) if motor.phases == 3 else 1.0
     denominator = root_three * motor.rated_voltage_v * motor.power_factor
-    load_current = electrical_power_w / denominator
-    return math.sqrt(motor.no_load_current_a**2 + load_current**2)
+    return electrical_power_w / denominator
 
 
 # --------------------------------------------------------------------------
@@ -383,11 +408,22 @@ def cavitation_margin(
 # --------------------------------------------------------------------------
 
 
-def pump_curve(speed_rpm: float, points: int = 40, pump: PumpParameters = PUMP) -> list[dict[str, float]]:
-    """Head vs flow, from shutoff to the point where head reaches zero."""
+def runout_flow_lpm(speed_rpm: float, pump: PumpParameters = PUMP) -> float:
+    """Flow at which the pump curve reaches zero head -- the right-hand edge.
+
+    Extracted because two callers need it: the pump curve's own flow axis, and
+    the system curve's, which must span far enough to cross it.
+    """
     speed_ratio = max(speed_rpm, 1.0) / pump.rated_speed_rpm
     shutoff = pump.shutoff_head_m * speed_ratio**2
-    max_flow = math.sqrt(shutoff / pump.head_coefficient) if shutoff > 0 else 0.0
+    if shutoff <= 0.0:
+        return 0.0
+    return m3s_to_lpm(math.sqrt(shutoff / pump.head_coefficient))
+
+
+def pump_curve(speed_rpm: float, points: int = 40, pump: PumpParameters = PUMP) -> list[dict[str, float]]:
+    """Head vs flow, from shutoff to the point where head reaches zero."""
+    max_flow = lpm_to_m3s(runout_flow_lpm(speed_rpm, pump))
     return [
         {
             "flow_lpm": m3s_to_lpm(max_flow * i / (points - 1)),
@@ -400,10 +436,18 @@ def pump_curve(speed_rpm: float, points: int = 40, pump: PumpParameters = PUMP) 
 def system_curve(
     valve_opening: float,
     blockage: float = 0.0,
-    max_flow_lpm: float = 40.0,
+    max_flow_lpm: float | None = None,
     points: int = 40,
 ) -> list[dict[str, float]]:
-    """Required head vs flow for the current valve and blockage state."""
+    """Required head vs flow for the current valve and blockage state.
+
+    The flow axis defaults to the runout flow of the rated pump curve, so the
+    system curve always spans far enough to cross it. A fixed literal here goes
+    stale the moment the duty point moves, and a system curve that stops short
+    of the intersection is a chart with no operating point on it.
+    """
+    if max_flow_lpm is None:
+        max_flow_lpm = runout_flow_lpm(PUMP.rated_speed_rpm)
     return [
         {
             "flow_lpm": max_flow_lpm * i / (points - 1),

@@ -50,12 +50,12 @@ class PumpParameters:
     H(Q) = shutoff_head - head_coefficient * Q^2      [m, with Q in m^3/s]
 
     The coefficient is derived from two catalogue-style points rather than
-    typed in blind: shutoff at 12.0 m and 8.0 m at the duty flow of 20 L/min.
+    typed in blind: shutoff at 12.0 m and 8.0 m at the duty flow of 110 L/min.
 
         a = (H0 - H_duty) / Q_duty^2
-          = (12.0 - 8.0) / (20/60000)^2
-          = 4.0 / (3.3333e-4)^2
-          = 3.60e7  m / (m^3/s)^2
+          = (12.0 - 8.0) / (110/60000)^2
+          = 4.0 / (1.8333e-3)^2
+          = 1.1901e6  m / (m^3/s)^2
 
     Efficiency is the standard parabola about the best efficiency point,
 
@@ -67,18 +67,20 @@ class PumpParameters:
     put the efficiency at 5 % of BEP flow at 21 %, where the standard shape
     gives under 4 %. That made the low-flow region (recirculation, temperature
     rise, radial load) look far milder than it is.
+
+    eta_BEP is NOT a parameter. It is computed from the regulatory minimum
+    efficiency correlation -- see `bep_efficiency` -- so that no peak efficiency
+    figure is ever typed into this project.
     """
 
     tag: str = "P-101"
     rated_speed_rpm: float = 1450.0
     shutoff_head_m: float = 12.0
-    duty_flow_lpm: float = 20.0
+    duty_flow_lpm: float = 110.0
     duty_head_m: float = 8.0
 
-    # Best efficiency point. eta_BEP follows from the specific speed below, it
-    # is not a catalogue guess -- see the specific_speed_nq docstring.
-    bep_flow_lpm: float = 22.0
-    bep_efficiency: float = 0.42
+    #: BEP sits 10 % above the rated duty flow, the usual selection margin.
+    bep_flow_lpm: float = 121.0
 
     impeller_diameter_m: float = 0.105
     suction_diameter_m: float = 0.025
@@ -93,27 +95,63 @@ class PumpParameters:
         return (self.shutoff_head_m - self.duty_head_m) / (duty_flow_m3s**2)
 
     @property
+    def bep_head_m(self) -> float:
+        """Head on the rated curve at the BEP flow. H_BEP = H0 - a Q_BEP^2."""
+        bep_flow_m3s = self.bep_flow_lpm / 60000.0
+        return self.shutoff_head_m - self.head_coefficient * bep_flow_m3s**2
+
+    @property
     def specific_speed_nq(self) -> float:
-        """n_q = N sqrt(Q) / H^0.75 at the rated duty point.
+        """n_s = N sqrt(Q_BEP) / (H_BEP / i)^0.75, the regulation's definition.
 
-        With N in rpm, Q in m^3/s and H in m:
-
-            n_q = 1450 * sqrt(3.333e-4) / 8^0.75 = 5.6
-
-        This is the number that fixes bep_efficiency. Conventional centrifugal
-        impellers sit at n_q 10-80; below about 10 the impeller passage is so
-        narrow that disc friction on the shroud faces and volumetric leakage
-        past the wear ring dominate the loss budget, and measured peak
-        efficiency for this size and shape falls in the 35-45 % band (Gulich,
-        Centrifugal Pumps, ch. 3.6-3.7, efficiency-vs-n_q correlation). 42 % is
-        the middle of that band.
-
-        The value used before was 62 %, borrowed from a mid-n_q machine. It
-        understated shaft power by about a third, which propagated into motor
-        loading, the current signature and the thermal model.
+        Commission Regulation (EU) No 547/2012, Annex III: N in rpm, Q at BEP
+        in m^3/s, H at BEP in m, i the number of stages (1 here). Specific
+        speed is defined AT the best efficiency point, not at the duty point --
+        an earlier version evaluated it at duty and got a different number for
+        the same machine.
         """
-        duty_flow_m3s = self.duty_flow_lpm / 60000.0
-        return self.rated_speed_rpm * math.sqrt(duty_flow_m3s) / self.duty_head_m**0.75
+        bep_flow_m3s = self.bep_flow_lpm / 60000.0
+        return self.rated_speed_rpm * math.sqrt(bep_flow_m3s) / self.bep_head_m**0.75
+
+    @property
+    def bep_efficiency(self) -> float:
+        """Peak efficiency, computed -- never typed in.
+
+        The minimum-efficiency correlation of Commission Regulation (EU) No
+        547/2012, Annex III (OJ L 165/34, 26.6.2012):
+
+            (eta_BEP)min,requ = 88.59 x + 13.46 y
+                              - 11.48 x^2 - 0.85 y^2 - 0.38 x y - C
+
+            x = ln(n_s)
+            y = ln(Q_BEP)
+            C = 128.07   for ESOB at 1450 rpm with MEI >= 0.40
+
+        UNIT TRAP, and it is the regulation's own, not a slip here: n_s is
+        defined with Q in m^3/s, while y is the natural log of Q in m^3/h. The
+        two flows are therefore named separately below and must never be folded
+        into one variable. Unifying them changes eta_BEP by about 14 points.
+
+        This replaces a hand-set 0.42 justified by a specific-speed band
+        argument that cited no external source. The regulation is a source: it
+        is the legal minimum a water pump of this specific speed and size may
+        have, and using it means the model claims no efficiency better than the
+        floor the machine would have to clear to be sold.
+        """
+        # Q at BEP in m^3/h -- the unit the regulation's y term uses.
+        bep_flow_m3h = self.bep_flow_lpm * 60.0 / 1000.0
+        x = math.log(self.specific_speed_nq)
+        y = math.log(bep_flow_m3h)
+        c_esob_1450_mei_040 = 128.07
+        eta_percent = (
+            88.59 * x
+            + 13.46 * y
+            - 11.48 * x**2
+            - 0.85 * y**2
+            - 0.38 * x * y
+            - c_esob_1450_mei_040
+        )
+        return eta_percent / 100.0
 
 
 # --------------------------------------------------------------------------
@@ -128,22 +166,22 @@ class MotorParameters:
     Synchronous speed = 120 * 50 / 4 = 1500 rpm; 1450 rpm rated implies
     slip = (1500 - 1450) / 1500 = 3.3 %, which is typical for this size.
 
-    Sizing note. This was first written as a 0.75 kW 415 V three-phase motor,
-    which is wrong for this pump and broke the model: the duty hydraulic power
-    is only about 26 W, so the computed line current sat permanently on the
-    no-load floor and carried no information about the hydraulic state. Current
-    is one of the diagnostic signals, so a motor whose current never moves makes
-    blockage and dry-run undetectable electrically. A 0.37 kW single-phase motor
-    is both realistic for a 20 L/min rig and leaves current responsive to load.
+    Sizing note. The rating follows the duty point and has been resized with
+    it. At 110 L/min and 8 m the pump absorbs 294 W at the shaft, so the 120 W
+    motor this file previously specified would have been loaded to 245 % of its
+    rating -- the machine would not run. 370 W is the standard frame above it
+    and puts the duty point at 79 % load, which is where a correctly selected
+    motor sits: enough margin for the runout end of the curve, close enough to
+    rating that line current still moves with the hydraulic state.
+
+    That last point is the constraint that decides the rating. Current is one
+    of the diagnostic inputs, so a motor oversized to the next frame again
+    would sit near its magnetising current at every hydraulic condition and
+    report nothing about blockage or dry running.
     """
 
     tag: str = "MTR-101"
-    # Duty shaft power is ~42 W (26 W hydraulic at 62 % pump efficiency), so a
-    # 370 W motor would run at 11 % load where current is almost entirely
-    # magnetising and barely responds to the hydraulics. 120 W puts the duty
-    # point near 40 % load, which is a sensible margin and keeps current
-    # diagnostic.
-    rated_power_w: float = 120.0
+    rated_power_w: float = 370.0
     rated_speed_rpm: float = 1450.0
     synchronous_speed_rpm: float = 1500.0
     supply_frequency_hz: float = 50.0
@@ -152,16 +190,9 @@ class MotorParameters:
     phases: int = 1
     power_factor: float = 0.82
     efficiency: float = 0.72  # small single-phase motors are not efficient
-    # Magnetising current with no mechanical load.
-    no_load_current_a: float = 0.42
-    rated_current_a: float = 0.95
+    #: Nameplate current at rated shaft power: 370 / (0.72 * 230 * 0.82).
+    rated_current_a: float = 2.72
     service_factor: float = 1.15
-    # Mechanical drag at rated speed: bearings, seal and windage, absorbed
-    # whatever the hydraulic load. Sized as a realistic fraction of a small
-    # pump's shaft power rather than of the motor rating -- deriving it from
-    # the motor rating made parasitic loss four times the hydraulic power and
-    # swamped every hydraulic effect.
-    parasitic_loss_at_rated_w: float = 9.0
 
 
 # --------------------------------------------------------------------------
@@ -184,20 +215,26 @@ class HydraulicCircuit:
     #
     # Chosen so the fully-open operating point lands near the best efficiency
     # point rather than out at runout. Solving the intersection backwards for a
-    # target duty flow of 21 L/min:
-    #     a + K = (H0 - H_static) / Q*^2 = (12 - 2) / (21/60000)^2 = 8.16e7
-    #     K     = 8.16e7 - 3.60e7 = 4.56e7
-    #     pipe  = K - valve_open = 4.56e7 - 0.30e7 = 4.26e7
-    # A small-bore rig with several metres of 20 mm tubing and fittings really
-    # does have a resistance this high.
-    pipe_resistance: float = 4.26e7
+    # target duty flow of 115.5 L/min:
+    #     a + K = (H0 - H_static) / Q*^2 = (12 - 2) / (115.5/60000)^2 = 2.698e6
+    #     K     = 2.698e6 - 1.190e6 = 1.508e6
+    #     pipe  = K - valve_open = 1.508e6 - 9.917e4 = 1.4083e6
+    #
+    # Every coefficient in this class is the previous rig's value scaled by
+    # (20/110)^2 = 0.033058. That is what makes the duty-point move a SIMILARITY
+    # transform: head, efficiency and every dimensionless energy ratio on this
+    # platform are unchanged by it, and only the flow scale moves. The three
+    # percentages on the Energy page were verified to move by under 0.03 points.
+    pipe_resistance: float = 1.4083e6
     # Additional resistance at 100 % open. A real valve is never lossless.
-    valve_resistance_open: float = 0.30e7
+    valve_resistance_open: float = 9.9174e4
     # Resistance approached as the valve shuts. Not infinite: a shut valve
     # still leaks slightly, and an infinite value makes the solver ill-posed.
-    valve_resistance_closed: float = 4.0e9
+    valve_resistance_closed: float = 1.3223e8
     # Suction-side friction, used for the suction pressure and NPSH estimate.
-    suction_resistance: float = 0.45e7
+    # Set from the adjudicated NPSHa of 9.165 m at duty, which the plain
+    # (20/110)^2 scaling of the old 0.45e7 would miss by 5 mm.
+    suction_resistance: float = 1.4744e5
     suction_lift_m: float = 1.2  # pump above reservoir surface
     reservoir_level_m: float = 0.8
 

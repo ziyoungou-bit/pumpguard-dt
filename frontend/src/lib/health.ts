@@ -28,12 +28,9 @@ import { ALARM_LIMITS } from './pumpParameters.generated'
 export const NPSH_MARGIN_GUIDELINE_M = ALARM_LIMITS.npsh_margin_low.alarm
 /**
  * Bearing temperature above which grease life starts to be consumed fast.
- *
- * TODO(RECONCILE): shows 62, source says
- * ALARM_LIMITS.bearing_temperature_high.alarm = 65. Changing it moves the
- * health index on every screen, so it converges in Step 3.
+ * Uses the alarm setpoint from the backend's single source of truth.
  */
-export const BEARING_TEMPERATURE_LIMIT_C = 62
+export const BEARING_TEMPERATURE_LIMIT_C = ALARM_LIMITS.bearing_temperature_high.alarm
 /**
  * Efficiency is penalised below this FRACTION of the BEP efficiency, not below
  * an absolute figure. An absolute threshold silently becomes an always-on

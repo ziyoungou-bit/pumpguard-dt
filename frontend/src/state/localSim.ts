@@ -22,6 +22,7 @@ import type { Telemetry } from '../types/contracts'
 import { AssetState, DataSource, FaultType } from '../types/contracts'
 import { computeFrame } from '../lib/frameModel'
 import { MOTOR, THERMAL } from '../lib/pumpPhysics'
+import { ALARM_LIMITS } from '../lib/pumpParameters.generated'
 import { seededRandom } from '../lib/vibration'
 
 export type ScadaCommand =
@@ -203,11 +204,10 @@ export function tickLocalSim(
   // shows as TRIP actually trips the machine instead of just colouring a row.
   let nextState = asset_state
   if (asset_state === AssetState.RUNNING) {
-    // TODO(RECONCILE): trips at 95 C / 11 mm/s, source says
-    // ALARM_LIMITS.motor_temperature_high.trip = 90 and VIBRATION.trip_mm_s =
-    // 5.625. Lowering them changes when the browser model faults, which is
-    // behaviour on screen, so it converges in Step 3.
-    if (frame.motor_temperature_c > 95 || frame.vibration_rms_mm_s > 11) {
+    if (
+      frame.motor_temperature_c > ALARM_LIMITS.motor_temperature_high.trip ||
+      frame.vibration_rms_mm_s > ALARM_LIMITS.vibration_high.trip
+    ) {
       nextState = AssetState.FAULT
     }
   }
