@@ -275,8 +275,9 @@ def pump_efficiency(flow_lpm: float, speed_rpm: float, pump: PumpParameters = PU
     fixes the efficiency of the machine is where it sits on its OWN curve, not
     how many litres per minute leave the discharge. Dividing the absolute flow
     back to rated speed is exactly that coordinate. Looking eta up on absolute
-    flow instead nails the BEP to a fixed 22 L/min, so at half speed the pump is
-    reported as running far off BEP when it is in fact sitting precisely on it.
+    flow instead nails the BEP to one fixed litres-per-minute figure, the value
+    it happens to have at rated speed, so at half speed the pump is reported as
+    running far off BEP when it is in fact sitting precisely on it.
 
     The parabola vanishes at Q = 0 and at 2 Q_BEP. There is deliberately no
     floor: hydraulic power rho g Q H goes to zero with Q while disc friction and

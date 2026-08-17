@@ -4,21 +4,20 @@
 
 ## Excluded: the described-but-unimplemented version
 
-`frontend/src/lib/health.ts:12` quotes, inside the module docstring, the formula
+The module docstring of `frontend/src/lib/health.ts` used to quote, verbatim, a
+health formula with its own coefficients — a `12` per mm/s of vibration above
+1.8 and a `60` per unit of efficiency below 0.55. It was quoted there as the
+*defect being described*: the stale string the Engineering page used to print.
+Grepping the repository for those coefficients against `RMS - 1.8` /
+`0.55 - eta` returned that one line and nothing else — no function, constant or
+test computed it. It was prose, not code, and `docs/DUPLICATED_QUANTITIES.md:152`
+already flagged it as "documents a formula no longer implemented anywhere".
 
-```
-Health = 100 - 12 max(0, RMS - 1.8) - 60 max(0, 0.55 - eta) - ... = 100.0
-```
-
-It is quoted there as the *defect being described* — the stale string the
-Engineering page used to print. Grepping the repository for its coefficients
-(`12`/`60` against `RMS - 1.8` / `0.55 - eta`) returns that one line and nothing
-else: no function, constant or test computes it. It is prose, not code, and
-`docs/DUPLICATED_QUANTITIES.md:152` already flags it as "documents a formula no
-longer implemented anywhere". **It lives only at `frontend/src/lib/health.ts:12`
-and can be deleted** — though note that the surrounding paragraph is a
-deliberate explanation of why the module exists, so only the quoted formula line
-is dead weight, not the docstring around it.
+**It has now been deleted.** The surrounding paragraph is a deliberate
+explanation of why the module exists and has been kept, rewritten to describe
+the defect without reproducing the coefficients — quoting them put a second,
+unexecuted copy of the health index inside the file whose whole purpose is to
+be the only copy.
 
 ## Scope note: there are four implementations, not two
 
@@ -28,8 +27,8 @@ a `health_index` found **four**:
 | # | Site | Role |
 |---|---|---|
 | A | `backend/app/ml/diagnosis.py:465` `health_index()` | The named, documented backend index. Serves `/api/diagnosis`. |
-| B | `frontend/src/lib/health.ts:74` `healthBreakdown()` | The browser-side index. Serves offline/recorded telemetry and the Engineering page. |
-| C | `backend/app/api/routes.py:1125` `_physics_health()` | Fallback used by `physics_diagnosis()` when the ML diagnosis module is unavailable. |
+| B | `frontend/src/lib/health.ts:76` `healthBreakdown()` | The browser-side index. Serves offline/recorded telemetry and the Engineering page. |
+| C | `backend/app/api/routes.py:1154` `_physics_health()` | Fallback used by `physics_diagnosis()` when the ML diagnosis module is unavailable. |
 | D | `backend/app/simulation/engine.py:449` `_condition_indices()` | Writes `Telemetry.health_index` on every simulated frame. Self-described placeholder; reads injected ground-truth `severity`. |
 
 **A and B are documented in full below**, as instructed. C and D are recorded in
@@ -76,7 +75,7 @@ saturating at 0 and 1). Penalties are summed and subtracted from 100.
 
 | Term | Weight | Ramp | Notes |
 |---|---|---|---|
-| `vibration` | 30 | 1.8 → 5.625 mm/s | Zero below 1.8, i.e. a **dead band across the whole of ISO zones A and B** |
+| `vibration` | 30 | 1.8 → 4.5 mm/s | Zero below 1.8, i.e. a **dead band across the whole of ISO zones A and B** |
 | `temperature` | 15 | motor 65 → 90 °C; bearing 55 → 80 °C | `max()` of the two — worse point wins, one shared budget |
 | `hydraulic` | 25 | flow shortfall 0.15 → 1.0; NPSH −4.0 → 0.0 m | `max()` of the two. Whole term forced to 0 when the duty solve is invalid (`:494-495`) |
 | `anomaly` | 20 | clamp(score, 0, 1) | Straight pass-through of the ML score |
@@ -91,7 +90,7 @@ reference tracks speed rather than being a table valid only at 1450 rpm.
 | Coefficient | Value | Literal or imported |
 |---|---|---|
 | `ISO_GOOD_MM_S` | 1.8 | **imported** — `VIBRATION.zone_b_c_mm_s`, `diagnosis.py:87` |
-| `ISO_TRIP_MM_S` | 5.625 | **imported, derived** — `VIBRATION.trip_mm_s` = 1.25 × 4.5, `alarm_thresholds.py:112-115` |
+| `ISO_TRIP_MM_S` | 4.5 | **imported** — `VIBRATION.trip_mm_s`, which is the ISO 20816-1 Class I C/D boundary taken directly, `alarm_thresholds.py:113-116` |
 | motor 65 / 90 °C | 65.0 / 90.0 | **imported** — `_LIMITS["motor_temperature_high"].warning/.trip` |
 | bearing 55 / 80 °C | 55.0 / 80.0 | **imported** — `_LIMITS["bearing_temperature_high"].warning/.trip` |
 | `NPSH_ERODED_M` | 4.0 | **literal**, `diagnosis.py:83` |
@@ -124,10 +123,10 @@ reference tracks speed rather than being a table valid only at 1450 rpm.
 
 | Item | Location |
 |---|---|
-| Entry point | `frontend/src/lib/health.ts:74` `healthBreakdown(input: HealthInputs): HealthBreakdown` |
+| Entry point | `frontend/src/lib/health.ts:76` `healthBreakdown(input: HealthInputs): HealthBreakdown` |
 | Vibration term | `frontend/src/lib/vibration.ts:441` `vibrationHealthPenalty(rmsMmS)` |
-| Constants | `frontend/src/lib/health.ts:28,33,40` |
-| Types | `frontend/src/lib/health.ts:42,50,63` `HealthTerm`, `HealthBreakdown`, `HealthInputs` |
+| Constants | `frontend/src/lib/health.ts:28,33,42` |
+| Types | `frontend/src/lib/health.ts:44,52,65` `HealthTerm`, `HealthBreakdown`, `HealthInputs` |
 | Banding | `frontend/src/lib/status.ts:75` `healthStatus(health)` — 85 / 65 / 40 |
 
 The function returns the *terms*, not just a number: `HealthTerm` carries a
@@ -140,19 +139,19 @@ drift from an applied one.
 
 | Signal | Unit | Read at |
 |---|---|---|
-| `running` | boolean (asset state = RUNNING) | `health.ts:75` |
-| `vibration_rms_mm_s` | mm/s RMS | `health.ts:97` |
-| `pump_efficiency` | fraction 0..1 | `health.ts:89,105` |
-| `bep_efficiency` | fraction 0..1 (0.42) | `health.ts:89` |
-| `npsh_margin_m` | m | `health.ts:111` |
-| `bearing_temperature_c` | °C | `health.ts:118` |
+| `running` | boolean (asset state = RUNNING) | `health.ts:77` |
+| `vibration_rms_mm_s` | mm/s RMS | `health.ts:99` |
+| `pump_efficiency` | fraction 0..1 | `health.ts:91,107` |
+| `bep_efficiency` | fraction 0..1 (0.4874, derived) | `health.ts:91` |
+| `npsh_margin_m` | m | `health.ts:113` |
+| `bearing_temperature_c` | °C | `health.ts:120` |
 
 No motor temperature, no flow, no sensor quality, no anomaly score.
 
 ### Penalty structure
 
 Four terms, summed and subtracted from 100. Ahead of them sits an explicit
-**stopped guard** (`health.ts:75-86`): when `running` is false the function
+**stopped guard** (`health.ts:77-88`): when `running` is false the function
 returns `health = 100, scored = false` with the guard named in the payload —
 a stopped machine has no vibration to judge, no operating point and no suction
 margin, so it is not scored at all rather than being scored as damaged.
@@ -170,9 +169,12 @@ already out of zone A, used to score a flat 100 while the diagnosis panel beside
 it named a fault, and "Imbalance, MINOR, severity 0.13" next to "Health 100/100"
 is a contradiction the reader resolves by distrusting both numbers.
 
-The efficiency term is relative for a documented reason (`health.ts:34-40`): an
+The efficiency term is relative for a documented reason (`health.ts:35-42`): an
 absolute threshold became an always-on penalty the moment η_BEP was corrected
-from 62 % to 42 %.
+downwards from an assumed 62 %. It has since been corrected a second time —
+η_BEP is no longer assumed at all but evaluated from the EU 547/2012 Annex III
+correlation — and the relative onset absorbed that change without an edit,
+which is the property it was introduced for.
 
 ### Coefficients
 
@@ -182,10 +184,10 @@ from 62 % to 42 %.
 | zone slopes 4 / 11 / 22 / 40 | — | **literals**, `vibration.ts:450` |
 | `NPSH_MARGIN_GUIDELINE_M` | 0.5 | **imported** — `ALARM_LIMITS.npsh_margin_low.alarm`, `health.ts:28` |
 | `BEARING_TEMPERATURE_LIMIT_C` | **65.0** | **imported** — `ALARM_LIMITS.bearing_temperature_high.alarm`, `health.ts:33` |
-| `EFFICIENCY_PENALTY_ONSET_FRACTION` | 0.89 | **literal**, `health.ts:40`; no backend counterpart |
-| efficiency weight 37 | — | **literal**, `health.ts:105` |
-| NPSH weight 14 | — | **literal**, `health.ts:112` |
-| bearing weight 1.4 | — | **literal**, `health.ts:118` |
+| `EFFICIENCY_PENALTY_ONSET_FRACTION` | 0.89 | **literal**, `health.ts:42`; no backend counterpart |
+| efficiency weight 37 | — | **literal**, `health.ts:107` |
+| NPSH weight 14 | — | **literal**, `health.ts:114` |
+| bearing weight 1.4 | — | **literal**, `health.ts:120` |
 
 > Correction to an existing document: `docs/DUPLICATED_QUANTITIES.md:128` records
 > `BEARING_TEMPERATURE_LIMIT_C = 62` as a hand-typed "fourth copy of 62". That is
@@ -194,7 +196,7 @@ from 62 % to 42 %.
 
 ### Output
 
-- **Range** 5..100 — floored at **5**, not 0 (`health.ts:125-128`): a machine
+- **Range** 5..100 — floored at **5**, not 0 (`health.ts:127-130`): a machine
   still running and still reporting is not in a zero-information state, and a bar
   pinned to the bottom hides the difference between bad and worse.
 - **Units** dimensionless index points.
@@ -209,7 +211,7 @@ from 62 % to 42 %.
 | Frame synthesis → `Telemetry.health_index` | `frontend/src/lib/frameModel.ts:215` (call), `:257` (assignment) |
 | Anomaly score derived from it | `frontend/src/lib/frameModel.ts:223` — `(100 − health) / 70`, clamped |
 | **Engineering page**, renders the terms | `frontend/src/pages/Engineering.tsx:52` (call), `:176-197` (render + guard text) |
-| Tests | `frontend/src/lib/health.test.ts:23,31,44,52,86,96,111,122` |
+| Tests | `frontend/src/lib/health.test.ts:30,38,51,59,93,103,118,130` |
 
 Downstream of `frameModel`, the number reaches every page that reads
 `telemetry.health_index`: `AppShell.tsx:183,222`, `Dashboard.tsx:24,67,75`,
@@ -222,7 +224,7 @@ Downstream of `frameModel`, the number reaches every page that reads
 | | **A — `ml/diagnosis.py:465`** | **B — `lib/health.ts:74`** |
 |---|---|---|
 | Terms | 5 | 4 |
-| Vibration | weight 30, linear ramp 1.8 → 5.625 mm/s | piecewise slopes 4 / 11 / 22 / 40, from 0 mm/s |
+| Vibration | weight 30, linear ramp 1.8 → 4.5 mm/s | piecewise slopes 4 / 11 / 22 / 40, from 0 mm/s |
 | Vibration dead band | **yes** — nothing scored below 1.8 mm/s | **no** — deliberately removed |
 | Motor temperature | 65 → 90 °C, shares a 15-pt budget | **absent** |
 | Bearing temperature | 55 → 80 °C, shares the same 15-pt budget | 1.4 pts/K above **65** °C |
@@ -243,11 +245,11 @@ Downstream of `frameModel`, the number reaches every page that reads
 ### Both evaluated at one identical healthy operating point
 
 Operating point: **1450 rpm, valve fully open, no injected fault**, solved from
-`physics.pump_model` — flow 21.00 L/min, head 7.59 m, η 0.419 against η_BEP 0.42.
-Frame values: RMS 0.612 mm/s, motor 48 °C, bearing 46 °C, NPSH margin 7.02 m, all
-sensors GOOD, anomaly score 0.0. (This is the `healthy` fixture from
-`health.test.ts:11-18`, with the extra channels A needs filled from the same
-solved duty point.)
+`physics.pump_model` — flow 115.52 L/min, head 7.588 m, η 0.4864 against η_BEP
+0.4874. Frame values: RMS 0.612 mm/s, motor 48 °C, bearing 46 °C, NPSH margin
+7.021 m (NPSHa 9.165 − NPSHr 2.144), all sensors GOOD, anomaly score 0.0. (This
+is the `healthy` fixture from `health.test.ts:11-28`, with the extra channels A
+needs filled from the same solved duty point.)
 
 **A — backend**, terms actually returned by `health_terms()`:
 
@@ -318,16 +320,17 @@ consumers.
 7. **The same inputs produce meaningfully different outputs.** At the identical
    healthy duty point above, A returns 100.00 and B returns 97.6. The gap is not
    noise: it is A's zone A+B dead band, the very defect `vibration.ts:426-439`
-   was written to remove and `health.test.ts:43-46` now asserts against
+   was written to remove and `health.test.ts:50-53` now asserts against
    ("scores a healthy machine in 94-99, not a suspiciously round 100"). B is a
    *corrected* A. A correction applied to one copy and not the other is the
    definition of drift.
 
 The two extra implementations reinforce this rather than complicating it.
-`routes._physics_health` (`routes.py:1125-1144`) is a worst-of over four
+`routes._physics_health` (`routes.py:1154-1173`) is a worst-of over four
 deviations with its own inline anchors — bearing 45 → 80 °C, motor 55 → 90 °C,
-flow against a hardcoded `21.0` — none of which match A's or B's, and it fills
-the *same* `Diagnosis.health_index` field as A whenever the ML module is absent
+flow against the solved duty point `_DUTY` — none of which match A's or B's, and
+it fills the *same* `Diagnosis.health_index` field as A whenever the ML module is
+absent
 (`routes.py:894,1113`). `engine._condition_indices` (`engine.py:449-470`) fills
 the same `Telemetry.health_index` field as B and is the number the live
 Dashboard shows; it is `100 (1 − min(0.7·severity + 0.3·physical, 1))`, and its

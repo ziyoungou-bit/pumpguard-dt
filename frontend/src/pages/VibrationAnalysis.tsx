@@ -244,7 +244,7 @@ export function VibrationAnalysis() {
               machine vibrating. The crest factor is the check -- a zero-mean signal cannot sit
               meaningfully below a pure sine's 1.41, because peak/RMS is minimised by putting the
               energy as far from zero as possible, and only a DC pedestal raises RMS without raising
-              peak. This page previously read 1.26.
+              peak.
             </p>
           </Card>
         </ErrorBoundary>

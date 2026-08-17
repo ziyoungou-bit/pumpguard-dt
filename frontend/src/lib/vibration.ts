@@ -15,6 +15,7 @@
  */
 
 import { amplitudeSpectrum } from './fft'
+import { DUTY_SHAFT_POWER_W } from './pumpPhysics'
 import { DISPLAY_BLOCK, VIBRATION } from './pumpParameters.generated'
 
 export interface BearingGeometryInput {
@@ -381,9 +382,9 @@ export function synthesiseVibration(params: VibrationSynthesisParams): Synthetic
  * The band edges 0.71 / 1.8 / 4.5 are the ISO 20816-1 Class I (small machines,
  * rigid support) zone boundaries and are used unchanged.
  *
- * Scope, stated because it matters: this asset develops about 51 W at the
- * shaft. ISO 20816-3 applies above 15 kW and ISO 20816-7 (rotodynamic pumps)
- * above roughly 1 kW, so this machine falls below the scope of every ISO
+ * Scope, stated because it matters: this asset develops a few hundred watts at
+ * the shaft. ISO 20816-3 applies above 15 kW and ISO 20816-7 (rotodynamic
+ * pumps) above roughly 1 kW, so this machine falls below the scope of every ISO
  * vibration-severity standard. The limits are applied BY ANALOGY, not by
  * certification. Naming a standard that does not cover the machine would be
  * the kind of borrowed authority this project exists to avoid.
@@ -401,8 +402,14 @@ export const VIBRATION_BAND_LABEL = `${VIBRATION.band_low_hz}-${VIBRATION.band_h
  * Two corrections are folded into it. ISO 10816-3 was withdrawn and replaced by
  * ISO 20816-3, so citing it dates the work. More importantly, neither ISO
  * 20816-3 (above 15 kW) nor ISO 20816-7 (rotodynamic pumps, above roughly 1 kW)
- * covers a machine developing 51 W at the shaft. This asset falls below the
- * scope of every ISO vibration-severity standard there is.
+ * covers a machine of this size. This asset falls below the scope of every ISO
+ * vibration-severity standard there is.
+ *
+ * The shaft power in the sentence is computed from the duty point, not typed
+ * in. It read "~51 W" against a 20 L/min duty; the rig now moves 110 L/min and
+ * the same sentence would have been off by a factor of six. A scope argument
+ * whose only number is stale is worse than no scope argument, because it still
+ * reads as though someone checked.
  *
  * The band edges themselves are not wrong -- 0.71 / 1.8 / 4.5 mm/s are the
  * ISO 20816-1 Class I rigid-support zone boundaries and are used unchanged.
@@ -413,8 +420,9 @@ export const VIBRATION_BAND_LABEL = `${VIBRATION.band_low_hz}-${VIBRATION.band_h
  */
 export const VIBRATION_SCOPE_NOTE =
   `Alarm band: ${ZONE_A_B_MM_S} / ${ZONE_B_C_MM_S} / ${ZONE_C_D_MM_S} mm/s RMS (${VIBRATION_BAND_LABEL}). ` +
-  'Derived from ISO 20816-1 Class I boundaries. Note: at ~51 W shaft power this asset falls below ' +
-  'the scope of ISO 20816-3 (>15 kW) and ISO 20816-7; limits are applied by analogy, not by certification.'
+  `Derived from ISO 20816-1 Class I boundaries. Note: at ~${DUTY_SHAFT_POWER_W.toFixed(0)} W shaft power ` +
+  'this asset falls below the scope of ISO 20816-3 (>15 kW) and ISO 20816-7; limits are applied by ' +
+  'analogy, not by certification.'
 
 export function vibrationSeverityZone(rmsMmS: number): { zone: string; label: string } {
   if (rmsMmS <= ZONE_A_B_MM_S) return { zone: 'A', label: 'Newly commissioned' }

@@ -22,7 +22,15 @@ import { Card, DefinitionRow, Notice, PageHeading, RangeSlider, StatTile } from 
 import { VsdComparisonChart } from '../components/charts'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
-const MIN_TARGET_LPM = 5
+// The slider's range and starting point are fractions of the duty flow, not
+// absolute litres. They used to be 5 and 15 L/min, which were a quarter and
+// three quarters of a 20 L/min duty; left as literals they would have become
+// 4.5 % and 14 % of the rescaled rig and the page would have opened on a
+// machine throttled almost shut.
+const MIN_TARGET_FRACTION = 0.25
+const DEFAULT_TARGET_FRACTION = 0.75
+const MIN_TARGET_LPM = MIN_TARGET_FRACTION * PUMP.duty_flow_lpm
+const DEFAULT_TARGET_LPM = DEFAULT_TARGET_FRACTION * PUMP.duty_flow_lpm
 const DEFAULT_HOURS_PER_YEAR = 4000
 const DEFAULT_TARIFF_AUD = 0.3
 
@@ -53,7 +61,7 @@ function PathColumn({ path, accent }: { path: OperatingPath; accent: string }) {
 
 export function EnergyComparison() {
   const maxFlow = useMemo(() => maxFlowLpm(), [])
-  const [targetFlow, setTargetFlow] = useState<number>(15)
+  const [targetFlow, setTargetFlow] = useState<number>(DEFAULT_TARGET_LPM)
   const [hoursPerYear, setHoursPerYear] = useState<number>(DEFAULT_HOURS_PER_YEAR)
   const [tariff, setTariff] = useState<number>(DEFAULT_TARIFF_AUD)
 
@@ -282,12 +290,18 @@ export function EnergyComparison() {
           </div>
         </div>
         <Notice tone="info" title="Scale, stated plainly">
-          This is a laboratory-scale machine: {fmt(comparison.throttle.electrical_power_w, 0)} W, so
-          the annual figures are tens of dollars and no drive would ever be fitted for them. The
-          physical relationships are the ones that matter, and they do not change with size. A
-          building's chilled-water or condenser-water pump is three orders of magnitude larger, the
-          same {fmt(savingPct, 0)} % becomes tens of thousands of kilowatt-hours, and the arithmetic
-          on this page is the arithmetic behind that business case.
+          This is still a bench-scale machine: {fmt(comparison.throttle.electrical_power_w, 0)} W
+          throttled, about the draw of a desktop computer. The annual saving comes out in the
+          hundreds of dollars rather than the tens it was at a fifth of this flow, and that is
+          large enough to be worth stating carefully:{' '}
+          <strong>it is not a payback case</strong>. A drive, its enclosure, its cabling and its
+          commissioning cost several times {fmt(annual.saved_aud, 0)} AUD, and nothing here has
+          been discounted, derated for part-load hours or checked against a real load profile. No
+          drive would be fitted to this rig on these figures. The physical relationships are the
+          transferable part, and they do not change with size. A building's chilled-water or
+          condenser-water pump is three orders of magnitude larger, the same {fmt(savingPct, 0)} %
+          becomes tens of thousands of kilowatt-hours, and the arithmetic on this page is the
+          arithmetic behind that business case.
         </Notice>
         <p className="mt-3 text-sm text-slate-600">
           The same calculation sits behind a <strong>NABERS Energy</strong> rating for an office

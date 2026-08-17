@@ -67,7 +67,17 @@ export function SettingsPage() {
               />
             )}
             <DefinitionRow label="Reconnect attempts" value={String(reconnectAttempts)} />
-            <DefinitionRow label="Session id" value={sessionId ?? 'Not issued'} />
+            {/*
+              Shown only when a session actually exists. The row used to read
+              "Session id: Not issued" offline, which looks like an unfinished
+              field -- it is not: api.ts records the id the backend returns and
+              every subsequent request carries it. There is genuinely no session
+              to name when the browser is running its own plant model, and an
+              absent row says that better than a placeholder does.
+            */}
+            {sessionId !== undefined && (
+              <DefinitionRow label="Session id" value={sessionId} />
+            )}
             <DefinitionRow label="API base URL" value={API_BASE_URL} />
             <DefinitionRow label="Websocket URL" value={WS_URL} />
             <DefinitionRow label="Frames buffered" value={String(history.length)} />

@@ -39,7 +39,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from scipy import signal
 from pydantic import BaseModel, Field
 
-from ..config.alarm_thresholds import VIBRATION
+from ..config.alarm_thresholds import ALARM_LIMITS, INTERLOCKS, VIBRATION
 from ..config.pump_parameters import BEARING, PUMP
 from ..contracts import (
     SCHEMA_VERSION,
@@ -938,11 +938,20 @@ class MLGateway:
 
 # -- physics rules ---------------------------------------------------------
 #
-# Reference duty point, from config/alarm_thresholds.py: 21.0 L/min, 7.59 m,
-# 0.563 A, NPSH margin 6.95 m, vibration ~0.75 mm/s RMS. Every threshold below
-# is quoted against those and against the ISO 20816-1 Class I bands, so the
-# rules can be checked against the commissioning data rather than taken on
-# trust.
+# Every threshold below is stated against the rated duty point and against the
+# ISO 20816-1 Class I bands, so the rules can be checked against the
+# commissioning data rather than taken on trust.
+#
+# The duty point is SOLVED here, not quoted. This block used to open with a
+# comment reading "21.0 L/min, 7.59 m, 0.563 A" and the rules below carried
+# those same figures as literals. Two of the three stopped being true when the
+# rig was rescaled to 110 L/min, and a diagnosis that quotes a machine which no
+# longer exists is worse than one that quotes nothing: the head, 7.59 m, was
+# still right, which makes the other two read as though someone had checked.
+
+#: Rated duty: valve fully open at rated speed. The reference every flow and
+#: current rule below is expressed against.
+_DUTY = pump_model.solve_operating_point(PUMP.rated_speed_rpm, 1.0)
 
 #: ISO 20816-1 Class I band edges, mm/s RMS.
 _ISO_SATISFACTORY = VIBRATION.zone_b_c_mm_s
@@ -950,8 +959,21 @@ _ISO_UNSATISFACTORY = VIBRATION.zone_c_d_mm_s
 _ISO_UNACCEPTABLE = VIBRATION.trip_mm_s
 #: NPSH margin below which cavitation is expected; 0 m is cavitation by definition.
 _NPSH_WARNING_M = 1.5
-#: Loss-of-load current. A dry-running pump unloads to about 0.42 A.
-_NO_LOAD_CURRENT_A = 0.46
+#: Loss-of-load current, taken from the protection rather than invented here.
+#: A dry pump unloads to about 0.44 A against a duty 2.17 A, and this is the
+#: current at which the low-current interlock declares the load gone. It
+#: replaces a literal 0.46 A, which was the old magnetising-current floor --
+#: a quantity B2 deleted from the power chain entirely.
+_LOSS_OF_LOAD_CURRENT_A = next(
+    limit for limit in ALARM_LIMITS if limit.key == "motor_current_low"
+).trip
+#: Flow at which low-flow is already an alarm condition. Used as the restriction
+#: rule's flow test so the diagnosis and the alarm list cannot disagree about
+#: what counts as low flow. It replaces a literal 14.0 L/min, which was two
+#: thirds of the old duty flow and is under an eighth of the current one.
+_FLOW_LOW_WARNING_LPM = next(
+    limit for limit in ALARM_LIMITS if limit.key == "flow_low"
+).warning
 
 
 def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
@@ -1015,7 +1037,11 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
     # 3. Loss of prime: no flow with the shaft turning and the motor unloaded.
     #    Current *falling* is the discriminator -- a blocked line raises
     #    discharge pressure and lowers current too, but not to no-load.
-    elif running and telemetry.flow_lpm < 2.0 and telemetry.motor_current_a < _NO_LOAD_CURRENT_A:
+    elif (
+        running
+        and telemetry.flow_lpm < INTERLOCKS.no_flow_lpm
+        and telemetry.motor_current_a < _LOSS_OF_LOAD_CURRENT_A
+    ):
         condition = FaultType.DRY_RUN.value
         confidence = 0.75
         evidence.append(
@@ -1024,13 +1050,16 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
                 statement="no flow while the shaft is turning, motor at no-load current",
                 measured_value=round(telemetry.motor_current_a, 3),
                 unit="A",
-                reference=f"duty 0.563 A, no-load {_NO_LOAD_CURRENT_A} A",
+                reference=(
+                    f"duty {_DUTY.motor_current_a:.2f} A, "
+                    f"loss of load below {_LOSS_OF_LOAD_CURRENT_A} A"
+                ),
             )
         )
 
     # 4. Restriction: the operating point has slid up the pump curve. Flow down
     #    AND head up together is the signature; flow down alone is not.
-    elif running and telemetry.flow_lpm < 14.0 and telemetry.pump_head_m > 9.0:
+    elif running and telemetry.flow_lpm < _FLOW_LOW_WARNING_LPM and telemetry.pump_head_m > 9.0:
         condition = FaultType.FLOW_RESTRICTION.value
         confidence = 0.7
         evidence.append(
@@ -1039,7 +1068,7 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
                 statement="operating point has moved up the pump curve: flow down, head up",
                 measured_value=round(telemetry.flow_lpm, 2),
                 unit="L/min",
-                reference="duty 21.0 L/min at 7.59 m",
+                reference=f"duty {_DUTY.flow_lpm:.1f} L/min at {_DUTY.head_m:.2f} m",
             )
         )
 
@@ -1139,7 +1168,7 @@ def _physics_health(telemetry: Telemetry) -> float:
     ]
     if telemetry.rpm > PUMP.rated_speed_rpm * 0.5:
         # Flow shortfall only means anything once the machine is up to speed.
-        deviations.append((21.0 - telemetry.flow_lpm) / 21.0)
+        deviations.append((_DUTY.flow_lpm - telemetry.flow_lpm) / _DUTY.flow_lpm)
     worst = min(max(max(deviations), 0.0), 1.0)
     return round(100.0 * (1.0 - worst), 2)
 

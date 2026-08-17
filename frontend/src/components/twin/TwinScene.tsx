@@ -13,14 +13,14 @@
  *     indication, not a thermal image.
  */
 
-import { VIBRATION } from '../../lib/pumpParameters.generated'
+import { ALARM_LIMITS, VIBRATION } from '../../lib/pumpParameters.generated'
 import { useMemo, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Html, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { Telemetry } from '../../types/contracts'
 import { AssetState } from '../../types/contracts'
-import { ASSET_TAGS } from '../../lib/pumpPhysics'
+import { ASSET_TAGS, PUMP, runoutFlowLpm } from '../../lib/pumpPhysics'
 
 /** How much the visual shake is magnified relative to real displacement. */
 export const VIBRATION_MAGNIFICATION = 400
@@ -87,8 +87,14 @@ export const SENSOR_MARKERS: SensorMarkerSpec[] = [
     label: 'Discharge flow',
     position: [0.78, 1.16, 0],
     unit: 'L/min',
+    // There is no high-flow alarm to borrow: the alarm list guards low flow,
+    // because losing prime is what actually happens. Runout is the physical
+    // ceiling instead -- past it the pump is off the end of its curve. This was
+    // a literal 32, which was half again the old 21 L/min duty and is now
+    // barely a quarter of the rig's normal flow, so a healthy machine would
+    // have shown its flow marker in alarm.
     read: (t) => t.flow_lpm,
-    alarmLimit: 32,
+    alarmLimit: runoutFlowLpm(PUMP.rated_speed_rpm),
     digits: 1,
   },
   {
@@ -97,7 +103,7 @@ export const SENSOR_MARKERS: SensorMarkerSpec[] = [
     position: [-1.02, 0.58, 0.3],
     unit: 'A',
     read: (t) => t.motor_current_a,
-    alarmLimit: 1.09,
+    alarmLimit: ALARM_LIMITS.motor_current_high.trip,
     digits: 2,
   },
 ]

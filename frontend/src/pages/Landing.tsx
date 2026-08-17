@@ -10,6 +10,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Boxes, Compass, GitBranch, Info } from 'lucide-react'
 import { GITHUB_URL } from '../lib/env'
+import { PUMP } from '../lib/pumpPhysics'
 import { Chip } from '../components/ui'
 
 const TECHNOLOGY_CHIPS = [
@@ -160,9 +161,10 @@ export function Landing() {
           <h2 className="text-sm font-semibold text-slate-900">The asset being modelled</h2>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
             A single-stage end-suction centrifugal pump (P-101) driven by a 4-pole single-phase
-            induction motor (MTR-101), of the size used on a laboratory test rig: roughly 20 L/min
-            at 8 m head, 1450 rpm. That scale is deliberate -- the numbers stay checkable by hand,
-            so the model can be argued with rather than merely believed.
+            induction motor (MTR-101), of the size used on a laboratory test rig:{' '}
+            {PUMP.duty_flow_lpm} L/min at {PUMP.duty_head_m} m head, {PUMP.rated_speed_rpm} rpm.
+            That scale is deliberate -- the numbers stay checkable by hand, so the model can be
+            argued with rather than merely believed.
           </p>
         </section>
       </main>

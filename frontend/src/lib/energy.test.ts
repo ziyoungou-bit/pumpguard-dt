@@ -149,6 +149,20 @@ describe('C4. annual cost is linear in hours and tariff', () => {
     expect(a.saved_kwh).toBeCloseTo(a.throttle_kwh - a.vsd_kwh, 6)
     expect(a.saved_aud).toBeCloseTo(a.saved_kwh * 0.3, 6)
   })
+
+  it('puts the annual saving in hundreds of dollars, not tens', () => {
+    // Pinned because the Energy page's "Scale, stated plainly" note argues
+    // FROM this magnitude. At 20 L/min the saving was about 50 AUD/yr and the
+    // note could say no drive would ever be fitted for it; at 110 L/min it is
+    // several hundred, which is a different sentence. The note must not go on
+    // claiming tens of dollars, and it must not start claiming payback either
+    // -- the drive still costs more than this and the rig is still a bench.
+    const a = annualEnergy(c, 4000, 0.3)
+    expect(a.throttle_kwh).toBeCloseTo(1664.5, 0)
+    expect(a.vsd_kwh).toBeCloseTo(753.9, 0)
+    expect(a.saved_kwh).toBeCloseTo(910.6, 0)
+    expect(a.saved_aud).toBeCloseTo(273.2, 0)
+  })
 })
 
 describe('the affinity-law estimate is shown, and is optimistic', () => {

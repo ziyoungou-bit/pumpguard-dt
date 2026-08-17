@@ -236,6 +236,20 @@ export function electricalPowerW(shaftW: number): number {
 }
 
 /**
+ * Shaft power at the rated duty point, watts.
+ *
+ * The single figure any prose has to quote when it needs to say how big this
+ * machine is -- the ISO scope note being the reason it exists. Computed from
+ * the duty point rather than written down, so a change to the duty flow or
+ * head moves every sentence that cites it. The backend's
+ * `physics.pump_model.duty_shaft_power_w` is the same expression.
+ */
+export const DUTY_SHAFT_POWER_W = shaftPowerW(
+  hydraulicPowerW(lpmToM3s(PUMP.duty_flow_lpm), PUMP.duty_head_m),
+  pumpEfficiency(PUMP.duty_flow_lpm, PUMP.rated_speed_rpm),
+)
+
+/**
  * Single-phase line current implied by the electrical power.
  *
  *     I = P_elec / (V * pf)

@@ -5,7 +5,7 @@ coefficient: if a value is not in this module it does not exist in the model.
 
 The machine modelled is a small single-stage end-suction centrifugal pump on a
 4-pole induction motor, of the size used on a laboratory test rig -- roughly
-20 L/min at 8 m head. That scale is chosen deliberately so the numbers stay
+110 L/min at 8 m head. That scale is chosen deliberately so the numbers stay
 checkable by hand and so the future physical rig in docs/hardware_roadmap.md
 can use the same parameter set.
 

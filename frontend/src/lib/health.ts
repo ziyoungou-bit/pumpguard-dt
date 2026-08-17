@@ -7,13 +7,13 @@
  * beside the implementation and had drifted from it, and the implementation
  * carried guards -- efficiency forced to zero at zero speed, health not scored
  * at all unless the machine is running -- that appeared nowhere in the printed
- * version. So the page showed
- *
- *     Health = 100 - 12 max(0, RMS - 1.8) - 60 max(0, 0.55 - eta) - ... = 100.0
- *
- * for a stopped machine, where substituting eta = 0 gives 67. The reader who
- * does the substitution concludes the page is lying, and on that page they are
- * the reader who matters most.
+ * version. So the page printed a full-marks total for a stopped machine while
+ * the formula beside it, substituted honestly, came to two thirds of that. The
+ * reader who does the substitution concludes the page is lying, and on that
+ * page they are the reader who matters most. The dead formula is deliberately
+ * not reproduced here: quoting its coefficients would put a second, unexecuted
+ * copy of the health index back into the file this module exists to be the only
+ * copy in.
  *
  * The fix is not a better string. It is that there is only one artefact: this
  * module computes the terms, frameModel sums them, and Engineering renders the
@@ -34,8 +34,10 @@ export const BEARING_TEMPERATURE_LIMIT_C = ALARM_LIMITS.bearing_temperature_high
 /**
  * Efficiency is penalised below this FRACTION of the BEP efficiency, not below
  * an absolute figure. An absolute threshold silently becomes an always-on
- * penalty the moment the machine's peak efficiency is corrected -- which is
- * exactly what happened when eta_BEP moved from 62 % to 42 %.
+ * penalty the moment the machine's peak efficiency is corrected -- which has
+ * now happened twice: once when eta_BEP was cut from an assumed 62 %, and again
+ * when it stopped being assumed at all and became a live evaluation of the
+ * EU 547/2012 Annex III correlation. A relative onset survives both.
  */
 export const EFFICIENCY_PENALTY_ONSET_FRACTION = 0.89
 

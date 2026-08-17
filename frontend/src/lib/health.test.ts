@@ -4,16 +4,23 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { PUMP } from './pumpPhysics'
+import { PUMP, solveOperatingPoint } from './pumpPhysics'
 import { healthBreakdown } from './health'
 import { ZONE_A_B_MM_S, ZONE_B_C_MM_S, vibrationHealthPenalty } from './vibration'
+
+// The machine sitting on its own rated duty point, solved rather than typed.
+// The efficiency and the suction margin used to be the literals 0.419 and 7.02.
+// Both were correct for a 20 L/min rig; after the rescale 0.419 was 86 % of
+// eta_BEP, which is below the 0.89 onset, so this fixture would have been
+// carrying an efficiency penalty while every test around it called it healthy.
+const duty = solveOperatingPoint(PUMP.rated_speed_rpm, 1)
 
 const healthy = {
   running: true,
   vibration_rms_mm_s: 0.612,
-  pump_efficiency: 0.419,
+  pump_efficiency: duty.pump_efficiency,
   bep_efficiency: PUMP.bep_efficiency,
-  npsh_margin_m: 7.02,
+  npsh_margin_m: duty.npsh_margin_m,
   bearing_temperature_c: 46,
 }
 
@@ -117,7 +124,8 @@ describe('the efficiency term is relative, not absolute', () => {
 
   it('stays zero if the peak efficiency of the machine is corrected again', () => {
     // The regression that made the old absolute 0.55 threshold an always-on
-    // penalty the moment eta_BEP moved from 62 % to 42 %.
+    // penalty the moment eta_BEP was corrected downwards. The sweep spans
+    // well below and well above every value eta_BEP has ever held here.
     for (const peak of [0.3, 0.42, 0.62, 0.85]) {
       const result = healthBreakdown({
         ...healthy,
