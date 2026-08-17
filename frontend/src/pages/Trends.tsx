@@ -8,7 +8,7 @@
  * y-axis, which invites a comparison that means nothing.
  */
 
-import { ALARM_LIMITS, VIBRATION } from '../lib/pumpParameters.generated'
+import { ALARM_LIMITS, TICK_INTERVAL_S, VIBRATION } from '../lib/pumpParameters.generated'
 import { useMemo, useState } from 'react'
 import { useAppState } from '../state/AppState'
 import type { Telemetry } from '../types/contracts'
@@ -133,7 +133,7 @@ export function Trends() {
           <DefinitionRow label="Samples in window" value={String(data.length)} />
           <DefinitionRow label="Window span" value={fmtDuration(spanS)} />
           <DefinitionRow label="Buffer depth" value={`${history.length} frames`} />
-          <DefinitionRow label="Sample interval" value="0.5 s" />
+          <DefinitionRow label="Sample interval" value={`${TICK_INTERVAL_S} s`} />
         </dl>
         <div className="mt-3">
           <ProvenanceNote>
