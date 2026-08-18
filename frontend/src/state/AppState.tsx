@@ -35,6 +35,7 @@ import { AssetState, DataSource, FaultType } from '../types/contracts'
 import * as api from '../lib/api'
 import { realtimeSocketUrl } from '../lib/env'
 import { DEMO_FRAMES, DEMO_TICK_S, demoAlarms, demoDiagnosis, demoValveOpening } from '../data/recordedDemo'
+import { PUMP } from '../lib/pumpPhysics'
 import { TICK_INTERVAL_S } from '../lib/pumpParameters.generated'
 import {
   applyCommand,
@@ -140,6 +141,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [sim, setSim] = useState<LocalSimState>(initialLocalSimState)
   const [acknowledged, setAcknowledged] = useState<Record<number, string>>({})
   const [lastCommandFeedback, setLastCommandFeedback] = useState('')
+  /**
+   * Valve position and speed setpoint as they stand on the LIVE controller.
+   *
+   * These are setpoints, not measurements: the telemetry frame carries what the
+   * machine is doing, not what it was asked to do, so there is nowhere else to
+   * read them back from. Without this, `valveOpening` was pinned to the literal
+   * 1 whenever the connection was live, which made the Valve opening slider a
+   * controlled input whose value never moved -- every drag was reverted by the
+   * next render, and the control read as broken while the backend was in fact
+   * accepting and applying it.
+   *
+   * Written optimistically on send and reconciled from /api/status, so the
+   * handle follows the pointer immediately and still converges on whatever the
+   * controller actually did with the request.
+   */
+  const [liveValveOpening, setLiveValveOpening] = useState(1)
+  const [liveRpmSetpoint, setLiveRpmSetpoint] = useState(PUMP.rated_speed_rpm)
   const [waitingSeconds, setWaitingSeconds] = useState(0)
   const [everConnected, setEverConnected] = useState(false)
   const mountedAtRef = useRef(Date.now())
@@ -295,7 +313,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id)
   }, [everConnected])
 
-  // --------------------------------------------------- diagnosis + alarm poll
+  // --------------------------------------- diagnosis + alarm + setpoint poll
+  // The setpoints ride along on this existing timer rather than getting one of
+  // their own: they are the controller's valve position and speed demand, which
+  // the telemetry frame does not carry (it reports what the machine IS doing,
+  // not what it was asked to do), and a second interval against a free-tier
+  // instance buys nothing the 2.5 s tick does not already give.
   useEffect(() => {
     let cancelled = false
     const poll = async () => {
@@ -306,10 +329,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         }
         return
       }
-      const [diagnosis, alarms] = await Promise.all([api.getDiagnosis(), api.getAlarms()])
+      const [diagnosis, alarms, status] = await Promise.all([
+        api.getDiagnosis(),
+        api.getAlarms(),
+        api.getStatus(),
+      ])
       if (cancelled) return
       setApiDiagnosis(diagnosis)
       setApiAlarms(Array.isArray(alarms) ? alarms : null)
+      if (status) {
+        // Reconcile the optimistic values with what the controller actually
+        // holds. A refused or clamped request corrects the slider here.
+        if (typeof status.valve_opening === 'number') setLiveValveOpening(status.valve_opening)
+        if (typeof status.rpm_setpoint === 'number') setLiveRpmSetpoint(status.rpm_setpoint)
+      }
     }
     void poll()
     const id = window.setInterval(() => void poll(), POLL_MS)
@@ -376,6 +409,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     (opening: number) => {
       const clamped = Math.min(1, Math.max(0, opening))
       if (connectionRef.current === 'live') {
+        // Optimistic: the slider is a controlled input, so without this its
+        // value would not change until a round trip completed -- and before
+        // this state existed, not even then.
+        setLiveValveOpening(clamped)
         void api.setValve(clamped)
         return
       }
@@ -391,6 +428,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     (rpm: number) => {
       const clamped = Math.min(1750, Math.max(0, rpm))
       if (connectionRef.current === 'live') {
+        setLiveRpmSetpoint(clamped)
         void api.setSpeed(clamped)
         return
       }
@@ -474,7 +512,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const valveOpening =
     connection === 'live'
-      ? 1
+      ? liveValveOpening
       : demoMode === 'interactive'
         ? sim.valve_opening
         : demoValveOpening(telemetry)
@@ -495,7 +533,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       sessionId,
       diagnosisFromApi: apiDiagnosis !== null,
       valveOpening,
-      rpmSetpoint: demoMode === 'interactive' ? sim.rpm_setpoint : telemetry.rpm || 1450,
+      rpmSetpoint:
+        connection === 'live'
+          ? liveRpmSetpoint
+          : demoMode === 'interactive'
+            ? sim.rpm_setpoint
+            : telemetry.rpm || 1450,
       noise: sim.noise,
       autoMode: sim.auto_mode,
       operatingHours: sim.operating_hours,
