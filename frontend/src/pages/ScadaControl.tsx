@@ -38,6 +38,15 @@ interface CommandSpec {
   icon: typeof Play
   variant: 'primary' | 'secondary' | 'danger'
   description: string
+  /**
+   * True for commands the backend controller does not implement. They exist in
+   * the browser-side state machine only, so against a live backend they cannot
+   * do anything. AppState short-circuits them before any request is made -- the
+   * button never 404s, it just reports "requested" and nothing moves, which is
+   * the failure this page's own subtitle promises not to ship. Disabled and
+   * labelled instead.
+   */
+  browserOnly?: boolean
 }
 
 const COMMANDS: CommandSpec[] = [
@@ -81,11 +90,25 @@ const COMMANDS: CommandSpec[] = [
     label: 'MAINTENANCE',
     icon: Wrench,
     variant: 'secondary',
-    description: 'Lock the asset out for maintenance. Only possible from OFF.',
+    description: 'Lock the asset out for maintenance.',
+    browserOnly: true,
   },
 ]
 
-/** The state machine, written out so the interface explains itself. */
+/**
+ * The state machine, written out so the interface explains itself.
+ *
+ * This table is the single source of truth on this page: the command cards
+ * above derive their permitted-from labels by filtering it, rather than
+ * carrying a second copy of the same rules. Two independently maintained
+ * copies is exactly how those labels came to contradict this table.
+ *
+ * The E_STOP rows match the backend, which was verified by calling it: the
+ * latch is released by pressing EMERGENCY STOP again (ESTOP_RESET -> OFF), and
+ * RESET under E_STOP is refused with "emergency stop active, reset it first".
+ * This table previously claimed E_STOP --RESET--> OFF, which is the transition
+ * the controller explicitly rejects.
+ */
 const TRANSITIONS: { from: string; event: string; to: string }[] = [
   { from: 'OFF', event: 'START', to: 'STARTING' },
   { from: 'STARTING', event: 'speed reached', to: 'RUNNING' },
@@ -94,19 +117,33 @@ const TRANSITIONS: { from: string; event: string; to: string }[] = [
   { from: 'RUNNING', event: 'protection trip', to: 'FAULT' },
   { from: 'FAULT', event: 'RESET', to: 'OFF' },
   { from: 'any', event: 'EMERGENCY STOP', to: 'E_STOP' },
-  { from: 'E_STOP', event: 'RESET', to: 'OFF' },
+  { from: 'E_STOP', event: 'EMERGENCY STOP', to: 'OFF' },
   { from: 'OFF', event: 'MAINTENANCE', to: 'MAINTENANCE' },
   { from: 'MAINTENANCE', event: 'MAINTENANCE', to: 'OFF' },
 ]
 
 /**
- * Derive the permitted starting states for each command from the state machine.
- * This is the single source of truth — the command cards read from here rather
- * than duplicating the rules.
+ * The event each command raises, so a card can find its own rows in
+ * TRANSITIONS. AUTO and MANUAL map to null deliberately: they hand control
+ * between the operator and the automation layer without moving the asset
+ * state, so they have no row and no permitted-from set. Printing a state name
+ * beside them would be inventing a rule the state machine does not contain.
  */
-function getPermittedStates(event: string): string[] {
-  const states = TRANSITIONS.filter((t) => t.event === event).map((t) => t.from)
-  return states.length > 0 ? states : []
+const COMMAND_EVENT: Record<ScadaCommand, string | null> = {
+  start: 'START',
+  stop: 'STOP',
+  reset: 'RESET',
+  estop: 'EMERGENCY STOP',
+  maintenance: 'MAINTENANCE',
+  auto: null,
+  manual: null,
+}
+
+/** States a command is legal from, read off the state machine table itself. */
+function permittedFrom(command: ScadaCommand): string[] {
+  const event = COMMAND_EVENT[command]
+  if (event === null) return []
+  return TRANSITIONS.filter((t) => t.event === event).map((t) => t.from)
 }
 
 export function ScadaControl() {
@@ -137,29 +174,19 @@ export function ScadaControl() {
         <Card title="Commands" subtitle="A refused command explains itself rather than doing nothing">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {COMMANDS.map((spec) => {
-              const blocked = isCommandBlocked(spec.command)
+              // Unavailable against a live backend when the controller has no
+              // such command. Offline the browser state machine implements it,
+              // so it stays live there rather than being disabled everywhere.
+              const unavailable = Boolean(spec.browserOnly) && connection === 'live'
+              const blocked = unavailable ? null : isCommandBlocked(spec.command)
               const active =
                 (spec.command === 'auto' && autoMode) ||
                 (spec.command === 'manual' && !autoMode) ||
                 (spec.command === 'maintenance' &&
                   telemetry.asset_state === AssetState.MAINTENANCE)
 
-              // Map each command to its state machine event name
-              const eventMap: Record<ScadaCommand, string | null> = {
-                start: 'START',
-                stop: 'STOP',
-                reset: 'RESET',
-                auto: null,  // control mode, not a state transition
-                manual: null,  // control mode, not a state transition
-                maintenance: 'MAINTENANCE',
-                estop: 'EMERGENCY STOP',
-              }
-
-              const event = eventMap[spec.command]
-              const permittedStates = event ? getPermittedStates(event) : []
-              const permittedLabel = permittedStates.length > 0
-                ? `Permitted from: ${permittedStates.join(', ')}`
-                : null
+              // Straight off the state machine table below -- see permittedFrom.
+              const permitted = permittedFrom(spec.command)
 
               return (
                 <div key={spec.command} className="rounded-lg border border-slate-200 p-3">
@@ -173,17 +200,22 @@ export function ScadaControl() {
                           : 'btn-secondary'
                     } ${active ? 'ring-2 ring-blue-400' : ''}`}
                     onClick={() => sendCommand(spec.command)}
-                    disabled={Boolean(blocked)}
+                    disabled={unavailable || Boolean(blocked)}
                   >
                     <spec.icon className="h-4 w-4" aria-hidden />
                     {spec.label}
                   </button>
                   <p className="mt-2 text-xs text-slate-600">{spec.description}</p>
-                  {blocked ? (
+                  {unavailable ? (
+                    <p className="mt-1.5 text-xs font-medium text-slate-500">
+                      {spec.label} is modelled in the browser-side simulation only; not implemented
+                      in the backend controller.
+                    </p>
+                  ) : blocked ? (
                     <p className="mt-1.5 text-xs font-medium text-amber-800">Blocked: {blocked}</p>
-                  ) : permittedLabel ? (
+                  ) : permitted.length > 0 ? (
                     <p className="mt-1.5 text-xs font-medium text-green-700">
-                      {permittedLabel}
+                      Permitted from {permitted.join(', ')}
                       {active ? ' -- currently selected' : ''}
                     </p>
                   ) : (
