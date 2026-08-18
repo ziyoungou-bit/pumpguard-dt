@@ -33,11 +33,12 @@ export const NPSH_MARGIN_GUIDELINE_M = ALARM_LIMITS.npsh_margin_low.alarm
 export const BEARING_TEMPERATURE_LIMIT_C = ALARM_LIMITS.bearing_temperature_high.alarm
 /**
  * Efficiency is penalised below this FRACTION of the BEP efficiency, not below
- * an absolute figure. An absolute threshold silently becomes an always-on
- * penalty the moment the machine's peak efficiency is corrected -- which has
- * now happened twice: once when eta_BEP was cut from an assumed 62 %, and again
- * when it stopped being assumed at all and became a live evaluation of the
- * EU 547/2012 Annex III correlation. A relative onset survives both.
+ * an absolute figure. eta_BEP is not a constant of this project: it is
+ * evaluated from the EU 547/2012 Annex III minimum-efficiency correlation for
+ * the pump's own specific speed and BEP flow. An absolute threshold would
+ * therefore be a penalty whose meaning shifts whenever the machine is
+ * respecified -- and, at some ratings, one that is always on. A relative onset
+ * is defined against whatever eta_BEP evaluates to.
  */
 export const EFFICIENCY_PENALTY_ONSET_FRACTION = 0.89
 
