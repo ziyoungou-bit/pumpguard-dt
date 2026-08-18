@@ -10,6 +10,7 @@
 import { ArrowDown, ArrowRight } from 'lucide-react'
 import { Card, PageHeading, ProvenanceNote, StatusBadge } from '../components/ui'
 import { PUMP } from '../lib/pumpPhysics'
+import { TICK_INTERVAL_S } from '../lib/pumpParameters.generated'
 import type { Tone } from '../lib/status'
 
 interface Stage {
@@ -64,7 +65,7 @@ const STAGES: Stage[] = [
     name: 'DAQ / Edge',
     role: 'Sampling, scaling, quality tagging',
     detail:
-      'Converts raw sensor signals into engineering units at a fixed tick rate and attaches provenance. In this project the tick is 0.5 s for process values, with the vibration waveform sampled far faster for spectral analysis.',
+      `Converts raw sensor signals into engineering units at a fixed tick rate and attaches provenance. In this project the tick is ${TICK_INTERVAL_S} s for process values, with the vibration waveform sampled far faster for spectral analysis.`,
     status: SIMULATED,
   },
   {
