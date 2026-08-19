@@ -7,6 +7,7 @@
  * monitoring chain this project actually builds and which it stands in for.
  */
 
+import { Link } from 'react-router-dom'
 import { ArrowDown, ArrowRight } from 'lucide-react'
 import { Card, PageHeading, ProvenanceNote, StatusBadge } from '../components/ui'
 import { PUMP } from '../lib/pumpPhysics'
@@ -100,7 +101,7 @@ const STAGES: Stage[] = [
     name: 'Machine Learning',
     role: 'Fault classification and anomaly detection',
     detail:
-      'A supervised classifier over the 16-feature contract vector predicts the condition; an unsupervised detector scores novelty. The feature order is frozen in the contract, because a model trained on one order and served with another produces confident nonsense and raises no error.',
+      'A supervised classifier over the 16-feature contract vector predicts the condition; an unsupervised detector scores novelty. The feature order is frozen in the contract, because a model trained on one order and served with another produces confident nonsense and raises no error. Its held-out confusion matrix, ROC curve and limitations are exposed on the Model Performance page.',
     status: IMPLEMENTED,
   },
   {
@@ -141,7 +142,14 @@ export function Architecture() {
                     <p className="mt-0.5 text-xs text-slate-500">{stage.role}</p>
                   </div>
                 </div>
-                <p className="min-w-0 flex-1 text-sm text-slate-600">{stage.detail}</p>
+                <div className="min-w-0 flex-1 text-sm text-slate-600">
+                  <p>{stage.detail}</p>
+                  {stage.name === 'Machine Learning' && (
+                    <Link className="mt-2 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-900" to="/app/model-performance">
+                      View model performance evidence
+                    </Link>
+                  )}
+                </div>
                 <div className="shrink-0">
                   <StatusBadge status={stage.status} size="sm" />
                 </div>

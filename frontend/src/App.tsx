@@ -21,6 +21,7 @@ import { Alarms } from './pages/Alarms'
 import { Maintenance } from './pages/Maintenance'
 import { Engineering } from './pages/Engineering'
 import { Architecture } from './pages/Architecture'
+import { ModelPerformance } from './pages/ModelPerformance'
 import { SettingsPage } from './pages/SettingsPage'
 
 /**
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="maintenance" element={<Page name="Maintenance"><Maintenance /></Page>} />
         <Route path="engineering" element={<Page name="Engineering"><Engineering /></Page>} />
         <Route path="architecture" element={<Page name="Architecture"><Architecture /></Page>} />
+        <Route path="model-performance" element={<Page name="Model Performance"><ModelPerformance /></Page>} />
         <Route path="settings" element={<Page name="Settings"><SettingsPage /></Page>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

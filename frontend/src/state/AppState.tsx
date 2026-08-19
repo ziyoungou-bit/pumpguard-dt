@@ -157,7 +157,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
    * controller actually did with the request.
    */
   const [liveValveOpening, setLiveValveOpening] = useState(1)
-  const [liveRpmSetpoint, setLiveRpmSetpoint] = useState(PUMP.rated_speed_rpm)
+  const [liveRpmSetpoint, setLiveRpmSetpoint] = useState<number>(PUMP.rated_speed_rpm)
   const [waitingSeconds, setWaitingSeconds] = useState(0)
   const [everConnected, setEverConnected] = useState(false)
   const mountedAtRef = useRef(Date.now())

@@ -1,4 +1,4 @@
-"""Offline training. Run as `python -m app.ml.train --output models`.
+﻿"""Offline training. Run as `python -m app.ml.train --output models`.
 
 Nothing here executes on import: the Dockerfile runs this module once at image
 build time and the running service only loads what it wrote.
@@ -28,6 +28,8 @@ industrial accuracy claim and must never be presented as one.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import math
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +47,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     roc_auc_score,
+    roc_curve,
 )
 from sklearn.model_selection import StratifiedGroupKFold, train_test_split
 
@@ -59,6 +62,14 @@ from .inference import (
 )
 
 METRICS_FILENAME = "metrics.json"
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
 
 #: Fixed so a rebuild of the image produces the same model as the last one.
 RANDOM_STATE: int = 20260812
@@ -125,6 +136,25 @@ def _present_classes(*label_arrays: np.ndarray) -> list[str]:
 def evaluate(y_true: np.ndarray, y_predicted: np.ndarray) -> dict:
     """Headline scores, per-class scores and the confusion matrix."""
     labels = _present_classes(y_true, y_predicted)
+    matrix = confusion_matrix(y_true, y_predicted, labels=labels)
+    report = classification_report(
+        y_true, y_predicted, labels=labels, output_dict=True, zero_division=0
+    )
+    per_class_rows: list[dict[str, float | int | str]] = []
+    for index, label in enumerate(labels):
+        support = int(matrix[index].sum())
+        correct = int(matrix[index, index])
+        scores = report[label]
+        per_class_rows.append(
+            {
+                "label": label,
+                "precision": float(scores["precision"]),
+                "recall": float(scores["recall"]),
+                "f1_score": float(scores["f1-score"]),
+                "support": support,
+                "accuracy": float(correct / support) if support else 0.0,
+            }
+        )
     return {
         "accuracy": float(accuracy_score(y_true, y_predicted)),
         "precision_macro": float(precision_score(y_true, y_predicted, average="macro", zero_division=0)),
@@ -135,15 +165,59 @@ def evaluate(y_true: np.ndarray, y_predicted: np.ndarray) -> dict:
         ),
         "recall_weighted": float(recall_score(y_true, y_predicted, average="weighted", zero_division=0)),
         "f1_weighted": float(f1_score(y_true, y_predicted, average="weighted", zero_division=0)),
-        "per_class": classification_report(
-            y_true, y_predicted, labels=labels, output_dict=True, zero_division=0
-        ),
+        "per_class": report,
+        "per_class_accuracy": per_class_rows,
         "confusion_matrix": {
             "labels": labels,
             "rows_are_true": True,
-            "matrix": confusion_matrix(y_true, y_predicted, labels=labels).tolist(),
+            "matrix": matrix.tolist(),
+            "row_normalized": [
+                [float(value / row.sum()) if row.sum() else 0.0 for value in row]
+                for row in matrix
+            ],
         },
     }
+
+
+
+def _roc_curve_points(
+    fpr: np.ndarray,
+    tpr: np.ndarray,
+    thresholds: np.ndarray,
+    max_points: int = 160,
+) -> list[dict[str, float]]:
+    """Enough ROC points to render the curve without checking in thousands of rows."""
+    total = len(fpr)
+    if total <= max_points:
+        selected = range(total)
+    else:
+        selected = sorted({0, total - 1, *np.linspace(0, total - 1, max_points - 2, dtype=int)})
+    return [
+        {"fpr": float(fpr[index]), "tpr": float(tpr[index]), "threshold": float(thresholds[index])}
+        for index in selected
+    ]
+
+def _severity_bucket(value: float) -> float:
+    """Round injected severity to the nearest 0.2 bucket used in the page."""
+    return min(1.0, max(0.0, math.floor(value * 5.0 + 0.5) / 5.0))
+
+
+def _severity_accuracy(severity: np.ndarray, y_true: np.ndarray, y_pred: np.ndarray) -> list[dict]:
+    buckets = [round(index / 5.0, 1) for index in range(6)]
+    bucketed = np.asarray([_severity_bucket(float(value)) for value in severity], dtype=float)
+    rows: list[dict] = []
+    for bucket in buckets:
+        mask = bucketed == bucket
+        support = int(mask.sum())
+        correct = int((y_true[mask] == y_pred[mask]).sum()) if support else 0
+        rows.append(
+            {
+                "severity": float(bucket),
+                "accuracy": float(correct / support) if support else 0.0,
+                "support": support,
+            }
+        )
+    return rows
 
 
 def print_metrics(metrics: dict) -> None:
@@ -215,9 +289,11 @@ def train(
     train_index, test_index = split_by_run(frame)
     x_train, x_test = features[train_index], features[test_index]
     y_train, y_test = labels[train_index], labels[test_index]
+    severity_test = frame.iloc[test_index]["severity"].to_numpy(dtype=float)
 
     classifier = RandomForestClassifier(**CLASSIFIER_PARAMS).fit(x_train, y_train)
-    grouped_metrics = evaluate(y_test, classifier.predict(x_test))
+    y_grouped_pred = classifier.predict(x_test)
+    grouped_metrics = evaluate(y_test, y_grouped_pred)
 
     # The comparison the split argument rests on: identical model, identical
     # data, only the split changed.
@@ -257,6 +333,7 @@ def train(
             ),
         },
         "grouped_split": grouped_metrics,
+        "severity_accuracy": _severity_accuracy(severity_test, y_test, y_grouped_pred),
         "leakage_check": {
             "row_split_accuracy": row_split_accuracy,
             "grouped_split_accuracy": grouped_metrics["accuracy"],
@@ -264,6 +341,13 @@ def train(
             "note": "The row-split number is the leaked one. It is recorded to be disbelieved.",
         },
         "anomaly_detector": anomaly_metrics,
+        "limitations": [
+            "Training and test data both come from the same physics simulator, and the features are generated by the same equations. The classifier learns the simulator output distribution, not pump physics. These scores are capability ceilings, not field-performance predictions.",
+            "Empirically, when the duty point changed from 20 L/min to 110 L/min, the original model predicted every frame in the new distribution as anomalous until retrained. A model that learned pump physics would not collapse that way under a pure operating-point shift.",
+            "normal and sensor_fault overlap in feature space; the committed misdiagnosis rate remains 45%. Healthy operation can still be reported as sensor_fault.",
+            "Fault Diagnosis currently uses browser-side physics rather than the backend classifier for the visible fallback because the classifier has this boundary.",
+            "The physics_model_conflict flag exists to expose disagreement between physics evidence and model evidence instead of hiding it.",
+        ],
     }
 
     _persist(output_dir, classifier, anomaly_bundle, metrics, data_metadata)
@@ -289,6 +373,10 @@ def _fit_anomaly_detector(
     span = reference[0] - reference[1]
     normalised = np.clip((reference[0] - detector.decision_function(x_test)) / span, 0.0, 1.0)
     is_fault = (y_test != FaultType.NORMAL.value).astype(int)
+    fpr, tpr, thresholds = roc_curve(is_fault, normalised)
+    threshold = 0.55
+    predicted_positive = (normalised >= threshold).astype(int)
+    tn, fp, fn, tp = confusion_matrix(is_fault, predicted_positive, labels=[0, 1]).ravel()
 
     metrics = {
         "trained_on": "NORMAL rows of the training split only",
@@ -297,6 +385,16 @@ def _fit_anomaly_detector(
         "healthy_mean_score": float(normalised[is_fault == 0].mean()),
         "faulty_mean_score": float(normalised[is_fault == 1].mean()),
         "roc_auc": float(roc_auc_score(is_fault, normalised)),
+        "roc_curve": _roc_curve_points(fpr, tpr, thresholds),
+        "threshold_055": {
+            "threshold": threshold,
+            "tp": int(tp),
+            "fp": int(fp),
+            "tn": int(tn),
+            "fn": int(fn),
+            "tpr": float(tp / (tp + fn)) if (tp + fn) else 0.0,
+            "fpr": float(fp / (fp + tn)) if (fp + tn) else 0.0,
+        },
         "parameters": {key: value for key, value in ANOMALY_PARAMS.items()},
     }
     bundle = ModelBundle(
@@ -326,8 +424,20 @@ def _persist(
     # Compressed: a 300-tree forest is 19 MB raw and 3.9 MB at level 3, with no
     # measurable difference in load time, and the artefact is copied into every
     # container image.
-    joblib.dump(classifier_bundle, target / CLASSIFIER_FILENAME, compress=3)
-    joblib.dump(anomaly_bundle, target / ANOMALY_FILENAME, compress=3)
+    classifier_path = target / CLASSIFIER_FILENAME
+    anomaly_path = target / ANOMALY_FILENAME
+    metrics_path = target / METRICS_FILENAME
+    joblib.dump(classifier_bundle, classifier_path, compress=3)
+    joblib.dump(anomaly_bundle, anomaly_path, compress=3)
+    data_dir = Path(data_metadata.get("dataset_path", "data/training_dataset.csv")).parent
+    dataset_path = data_dir / dataset_module.DATASET_FILENAME
+    dataset_meta_path = data_dir / dataset_module.METADATA_FILENAME
+    metrics["source_hashes"] = {
+        "classifier_sha256": _sha256(classifier_path),
+        "anomaly_sha256": _sha256(anomaly_path),
+        "dataset_sha256": _sha256(dataset_path),
+        "dataset_meta_sha256": _sha256(dataset_meta_path),
+    }
 
     model_card = {
         "name": "PumpGuard DT fault classifier and anomaly detector",
@@ -375,7 +485,7 @@ def _persist(
         ],
     }
     (target / MODEL_CARD_FILENAME).write_text(json.dumps(model_card, indent=2), encoding="utf-8")
-    (target / METRICS_FILENAME).write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"\nwrote artefacts to {target.resolve()}")
 
 
@@ -399,3 +509,4 @@ if __name__ == "__main__":  # pragma: no cover
 
 
 __all__ = ["CLASSIFIER_PARAMS", "ANOMALY_PARAMS", "evaluate", "split_by_run", "train"]
+
