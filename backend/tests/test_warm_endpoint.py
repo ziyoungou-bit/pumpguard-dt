@@ -61,3 +61,23 @@ def test_warm_array_size_matches_spec():
     freqs, psd = signal.welch(x, nperseg=64)
     assert len(freqs) == 33
     assert len(psd) == 33
+
+
+def test_warm_throttles_immediate_native_repeats(monkeypatch):
+    """The endpoint warms native scipy paths once, then skips immediate repeats."""
+    from app.api import routes
+
+    calls = 0
+
+    def fake_welch(x, nperseg):
+        nonlocal calls
+        calls += 1
+        return np.arange(33), np.ones(33)
+
+    monkeypatch.setattr(routes.signal, "welch", fake_welch)
+    monkeypatch.setattr(routes, "_LAST_NATIVE_WARM_AT", 0.0)
+    monkeypatch.setattr(routes.time, "monotonic", lambda: 100.0)
+
+    assert routes.warm() == {"ok": True}
+    assert routes.warm() == {"ok": True}
+    assert calls == 1

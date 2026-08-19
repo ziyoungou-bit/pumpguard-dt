@@ -39,6 +39,7 @@ export {
   MOTOR,
   PUMP,
   SPECIFIC_SPEED_NS,
+  TEMPERATURE,
   THERMAL,
 } from './pumpParameters.generated'
 

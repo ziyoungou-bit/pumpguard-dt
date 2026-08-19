@@ -19,6 +19,7 @@ import {
   MOTOR,
   PUMP,
   SPECIFIC_SPEED_NS,
+  TEMPERATURE,
   bladePassFrequencyHz,
   lpmToM3s,
   npshAvailableM,
@@ -264,15 +265,31 @@ export function Engineering() {
             <DefinitionRow label="Pipe resistance" value={`${e(CIRCUIT.pipe_resistance)} m/(m3/s)2`} />
             <DefinitionRow label="Suction lift" value={fmtUnit(CIRCUIT.suction_lift_m, 'm', 1)} />
             <DefinitionRow label="Fluid" value={`Water, ${FLUID.density} kg/m3 at 20 C`} />
+            <DefinitionRow label="TT-101" value="Motor winding temperature, embedded thermistor" />
+            <DefinitionRow
+              label="Winding basis"
+              value={`IEC 60034-1 thermal class ${TEMPERATURE.thermal_class}, resistance method; ${TEMPERATURE.rise_limit_resistance_k} K type-test rise at ${TEMPERATURE.ambient_reference_c} degC reference ambient`}
+            />
+            <DefinitionRow
+              label="Winding alarms"
+              value={`warning ${TEMPERATURE.motor_warning_c} degC, trip ${TEMPERATURE.motor_trip_c} degC absolute winding temperature`}
+            />
+            <DefinitionRow label="TT-102" value="Bearing housing surface temperature" />
+            <DefinitionRow
+              label="Bearing alarms"
+              value={`warning ${TEMPERATURE.bearing_warning_c} degC, trip ${TEMPERATURE.bearing_trip_c} degC declared design assumption`}
+            />
             <DefinitionRow label="Bearing" value={BEARING.designation} />
             <DefinitionRow label="Rolling elements" value={String(BEARING.rolling_elements)} />
           </dl>
         </div>
         <div className="mt-3">
           <ProvenanceNote>
-            These constants mirror backend/app/config/pump_parameters.py. The backend owns them; this
-            page is a client-side copy used to render the formulas and to keep the offline
-            demonstration physically coherent.
+            TT-101 is compared to an absolute winding-temperature alarm derived from a type-test
+            design limit; the IEC 60034-1 temperature-rise limit is not itself a condition-monitoring
+            alarm setting. That winding limit does not apply to casing or bearing housing readings.
+            TT-102 uses declared bearing housing design assumptions only: IEC 60034-1 limits winding
+            temperature, and API 610 is outside this rig's scope.
           </ProvenanceNote>
         </div>
       </Card>

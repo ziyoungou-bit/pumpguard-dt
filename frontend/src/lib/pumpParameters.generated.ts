@@ -77,7 +77,7 @@ export const THERMAL = {
   motor_time_constant_s: 420.0,
   bearing_rise_at_rated_c: 28.0,
   bearing_time_constant_s: 300.0,
-  dry_run_extra_rise_c: 55.0,
+  dry_run_extra_rise_c: 60.0,
   dry_run_time_constant_s: 180.0,
 } as const
 
@@ -120,12 +120,20 @@ export const VIBRATION = {
 } as const
 
 export const TEMPERATURE = {
-  motor_warning_c: 65.0,
-  motor_alarm_c: 75.0,
-  motor_trip_c: 90.0,
-  bearing_warning_c: 55.0,
-  bearing_alarm_c: 65.0,
+  thermal_class: 'B',
+  ambient_reference_c: 40.0,
+  hotspot_margin_c: 10.0,
+  rise_limit_resistance_k: 80.0,
+  winding_trip_margin_c: 0.0,
+  winding_warn_margin_c: 15.0,
+  bearing_warning_c: 65.0,
   bearing_trip_c: 80.0,
+  t_design_avg_c: 120.0,
+  t_class_hotspot_c: 130.0,
+  motor_warning_c: 105.0,
+  motor_alarm_c: 120.0,
+  motor_trip_c: 120.0,
+  bearing_alarm_c: 80.0,
 } as const
 
 export const ACQUISITION_BLOCK = {
@@ -201,17 +209,17 @@ export const ALARM_LIMITS = {
     tag: 'TT-101',
     unit: 'C',
     direction: 'high',
-    warning: 65.0,
-    alarm: 75.0,
-    trip: 90.0,
+    warning: 105.0,
+    alarm: 120.0,
+    trip: 120.0,
     deadband: 2.0,
   },
   bearing_temperature_high: {
     tag: 'TT-102',
     unit: 'C',
     direction: 'high',
-    warning: 55.0,
-    alarm: 65.0,
+    warning: 65.0,
+    alarm: 80.0,
     trip: 80.0,
     deadband: 2.0,
   },

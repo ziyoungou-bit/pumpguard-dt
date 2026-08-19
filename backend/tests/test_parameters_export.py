@@ -63,3 +63,41 @@ def test_the_frontend_port_no_longer_holds_its_own_constants():
             f"{name} is declared locally in pumpPhysics.ts again. "
             "It must come from pumpParameters.generated.ts."
         )
+
+
+def test_b8_temperature_limits_are_projected_from_one_backend_source():
+    """B8 redefines TT-101/TT-102; generated frontend constants must follow."""
+    from app.config.alarm_thresholds import ALARM_LIMITS, INTERLOCKS, TEMPERATURE
+
+    limits = {limit.key: limit for limit in ALARM_LIMITS}
+    motor = limits["motor_temperature_high"]
+    bearing = limits["bearing_temperature_high"]
+
+    assert TEMPERATURE.thermal_class == "B"
+    assert TEMPERATURE.ambient_reference_c == 40.0
+    assert TEMPERATURE.rise_limit_resistance_k == 80.0
+    assert TEMPERATURE.hotspot_margin_c == 10.0
+    assert TEMPERATURE.t_design_avg_c == 120.0
+    assert TEMPERATURE.t_class_hotspot_c == 130.0
+
+    assert motor.warning == 105.0
+    assert motor.alarm == 120.0
+    assert motor.trip == 120.0
+    assert bearing.warning == 65.0
+    assert bearing.alarm == 80.0
+    assert bearing.trip == 80.0
+    assert INTERLOCKS.high_motor_temperature_c == 120.0
+    assert INTERLOCKS.high_bearing_temperature_c == 80.0
+
+    generated = GENERATED.read_text(encoding="utf-8")
+    for expected in (
+        "rise_limit_resistance_k: 80.0",
+        "t_design_avg_c: 120.0",
+        "t_class_hotspot_c: 130.0",
+        "warning: 105.0",
+        "alarm: 120.0",
+        "trip: 120.0",
+        "warning: 65.0",
+        "alarm: 80.0",
+    ):
+        assert expected in generated

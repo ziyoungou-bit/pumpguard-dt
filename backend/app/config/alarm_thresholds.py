@@ -11,7 +11,7 @@ fully open), which is the reference a commissioning engineer would use:
     head            7.59 m            discharge pressure 166.3 kPa a
     efficiency      48.6 %            current             2.165 A
     NPSH margin     7.02 m            vibration RMS      ~0.80 mm/s
-    motor temp      ~48 C steady      bearing temp       ~40 C steady
+    motor temp      modelled steady   bearing temp       modelled steady
 
 Efficiency is the overall pump efficiency of Commission Regulation (EU) No
 547/2012 Annex I(4) -- hydraulic power out over shaft power in, with disc
@@ -117,40 +117,51 @@ class VibrationSeverityBands:
 
 @dataclass(frozen=True)
 class TemperatureLimits:
-    """One warning and one alarm per measurement point, with the basis stated.
+    """Winding and bearing temperature limits with their scope stated.
 
-    These were previously four different opinions each: the backend warned on
-    the motor at 65 C, the dashboard coloured its tile at 70, the demo alarm
-    fired at 78 and the trend line was drawn at 78. The values below are the
-    backend's, nominated as the single source; all divergent UI sites have been
-    updated to use ALARM_LIMITS from the generated parameters.
+    TT-101 is a motor winding temperature from an embedded thermistor. Its
+    design basis is IEC 60034-1, thermal class B, resistance method. The 80 K
+    limit is a type-test winding temperature-rise limit at rated load, not a
+    condition-monitoring alarm setting and not a casing-temperature limit.
 
-    Motor winding
-        Steady duty is about 48 C at this rig's 23 C ambient. Warning at 65 C is
-        the duty value plus a visible margin, which is the commissioning
-        practice this whole module follows -- limits placed against a verified
-        healthy point rather than against a catalogue. The TRIP is the one
-        anchored externally: IEC 60034-1 insulation Class B permits a 130 C
-        hot spot, and 90 C at a winding-embedded detector leaves 40 K for the
-        hot-spot gradient and for sensor placement.
-
-    Bearing
-        Steady duty is about 40 C. Warning at 55 C on the same basis. The TRIP
-        at 80 C comes from grease life rather than from metal: mineral-oil
-        lithium grease loses roughly half its life for every 15 K above 70 C
-        (the standard rolling-bearing rule, e.g. SKF's grease-life diagram), so
-        sustained operation above 80 C is a maintenance decision, not a normal
-        condition.
+    TT-102 is bearing housing surface temperature. IEC 60034-1 does not set a
+    bearing housing limit, and API 610 is scoped to petroleum/petrochemical
+    process pumps, not this small rig. The bearing setpoints here are declared
+    design assumptions, not standard requirements and not externally sourced.
     """
 
-    motor_warning_c: float = 65.0
-    motor_alarm_c: float = 75.0
-    motor_trip_c: float = 90.0
-
-    bearing_warning_c: float = 55.0
-    bearing_alarm_c: float = 65.0
+    thermal_class: str = "B"
+    ambient_reference_c: float = 40.0
+    hotspot_margin_c: float = 10.0
+    rise_limit_resistance_k: float = 80.0
+    winding_trip_margin_c: float = 0.0
+    winding_warn_margin_c: float = 15.0
+    bearing_warning_c: float = 65.0
     bearing_trip_c: float = 80.0
 
+    @property
+    def t_design_avg_c(self) -> float:
+        return self.ambient_reference_c + self.rise_limit_resistance_k
+
+    @property
+    def t_class_hotspot_c(self) -> float:
+        return self.t_design_avg_c + self.hotspot_margin_c
+
+    @property
+    def motor_warning_c(self) -> float:
+        return self.motor_trip_c - self.winding_warn_margin_c
+
+    @property
+    def motor_alarm_c(self) -> float:
+        return self.motor_trip_c
+
+    @property
+    def motor_trip_c(self) -> float:
+        return self.t_design_avg_c - self.winding_trip_margin_c
+
+    @property
+    def bearing_alarm_c(self) -> float:
+        return self.bearing_trip_c
 
 @dataclass(frozen=True)
 class VibrationBlock:
@@ -295,7 +306,7 @@ ALARM_LIMITS: tuple[AlarmLimit, ...] = (
     AlarmLimit(
         key="bearing_temperature_high",
         tag=ASSET.bearing_temperature,
-        description="High bearing temperature",
+        description="High bearing housing surface temperature",
         unit="C",
         direction="high",
         # Basis in TemperatureLimits.

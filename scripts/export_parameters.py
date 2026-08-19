@@ -168,7 +168,20 @@ def render() -> str:
             extra={"trip_mm_s": VIBRATION.trip_mm_s},
         )
     )
-    parts.append(emit_object("TEMPERATURE", TEMPERATURE))
+    parts.append(
+        emit_object(
+            "TEMPERATURE",
+            TEMPERATURE,
+            extra={
+                "t_design_avg_c": TEMPERATURE.t_design_avg_c,
+                "t_class_hotspot_c": TEMPERATURE.t_class_hotspot_c,
+                "motor_warning_c": TEMPERATURE.motor_warning_c,
+                "motor_alarm_c": TEMPERATURE.motor_alarm_c,
+                "motor_trip_c": TEMPERATURE.motor_trip_c,
+                "bearing_alarm_c": TEMPERATURE.bearing_alarm_c,
+            },
+        )
+    )
 
     # Two named acquisitions, deliberately different. Both are projected, with
     # their resolutions computed here, so the difference is a named fact rather

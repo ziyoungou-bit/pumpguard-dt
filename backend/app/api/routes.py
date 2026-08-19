@@ -30,6 +30,7 @@ fill a field.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
@@ -74,6 +75,13 @@ WAVEFORM_SAMPLES = 512
 #: rather than averaging or decimation because a discrete order must survive the
 #: reduction -- that is what the chart is for.
 SPECTRUM_BINS = 512
+
+#: Native warm-up is real but throttled. Keep-alive jobs call this endpoint
+#: repeatedly; the first call after the interval touches scipy's C extension,
+#: immediate repeats only prove the route is alive.
+_WARM_MIN_INTERVAL_S = 30.0
+_WARM_INPUT = np.random.default_rng(0).random(256)
+_LAST_NATIVE_WARM_AT = 0.0
 
 
 # --------------------------------------------------------------------------
@@ -199,8 +207,12 @@ def warm() -> dict[str, Any]:
     Deliberately tiny -- a 256-point array, a 64-point segment -- so it costs
     almost no CPU while still touching the same native code /api/vibration needs.
     """
-    x = np.random.rand(256)
-    signal.welch(x, nperseg=64)
+    global _LAST_NATIVE_WARM_AT
+
+    now = time.monotonic()
+    if now - _LAST_NATIVE_WARM_AT >= _WARM_MIN_INTERVAL_S:
+        signal.welch(_WARM_INPUT, nperseg=64)
+        _LAST_NATIVE_WARM_AT = now
     return {"ok": True}
 
 
@@ -974,7 +986,12 @@ _LOSS_OF_LOAD_CURRENT_A = next(
 _FLOW_LOW_WARNING_LPM = next(
     limit for limit in ALARM_LIMITS if limit.key == "flow_low"
 ).warning
-
+_MOTOR_TEMPERATURE_LIMIT = next(
+    limit for limit in ALARM_LIMITS if limit.key == "motor_temperature_high"
+)
+_BEARING_TEMPERATURE_LIMIT = next(
+    limit for limit in ALARM_LIMITS if limit.key == "bearing_temperature_high"
+)
 
 def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
     """Rule-based condition assessment from the measurements alone.
@@ -1163,8 +1180,10 @@ def _physics_health(telemetry: Telemetry) -> float:
         # NPSH margin: zero margin is full deviation.
         (_NPSH_WARNING_M - telemetry.npsh_margin_m) / 3.0,
         # Bearing temperature against its trip.
-        (telemetry.bearing_temperature_c - 45.0) / (80.0 - 45.0),
-        (telemetry.motor_temperature_c - 55.0) / (90.0 - 55.0),
+        (telemetry.bearing_temperature_c - _BEARING_TEMPERATURE_LIMIT.warning)
+        / (_BEARING_TEMPERATURE_LIMIT.trip - _BEARING_TEMPERATURE_LIMIT.warning),
+        (telemetry.motor_temperature_c - _MOTOR_TEMPERATURE_LIMIT.warning)
+        / (_MOTOR_TEMPERATURE_LIMIT.trip - _MOTOR_TEMPERATURE_LIMIT.warning),
     ]
     if telemetry.rpm > PUMP.rated_speed_rpm * 0.5:
         # Flow shortfall only means anything once the machine is up to speed.

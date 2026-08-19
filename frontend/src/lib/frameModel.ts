@@ -132,7 +132,7 @@ export function computeFrame(i: FrameInputs): Telemetry {
     THERMAL.bearing_rise_at_rated_c * loadFraction +
     (fault === FaultType.IMBALANCE ? 9 * severity : 0) +
     (fault === FaultType.MISALIGNMENT ? 12 * severity : 0) +
-    (dryRun ? 55 * severity : 0)
+    (dryRun ? THERMAL.dry_run_extra_rise_c * severity : 0)
   const motorTempC =
     i.motor_temperature_c + ((motorTarget - i.motor_temperature_c) * i.dt_s) / (rpm > 0 ? 420 : 900)
   const bearingTempC =

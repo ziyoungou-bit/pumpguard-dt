@@ -10,7 +10,7 @@ verified duty point of the rig (1450 rpm, valve open):
 
     FT-101  115.5 L/min      PT-101   92.0 kPa a
     PT-102  166.3 kPa a      CT-101   2.165 A
-    TT-101  ~41 C steady     TT-102   ~35 C steady
+    TT-101  winding temp      TT-102   bearing housing surface temp
     ACC-101  ~0.75 mm/s RMS  RPM-101  1450 rev/min
 
 They are chosen at roughly 0.3-0.6 % of the duty reading, which is what a

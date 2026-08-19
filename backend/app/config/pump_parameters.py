@@ -274,7 +274,7 @@ class ThermalParameters:
     bearing_rise_at_rated_c: float = 28.0
     bearing_time_constant_s: float = 300.0
     # Loss of hydraulic cooling (dry run) adds this much on top, slowly.
-    dry_run_extra_rise_c: float = 55.0
+    dry_run_extra_rise_c: float = 60.0
     dry_run_time_constant_s: float = 180.0
 
 
