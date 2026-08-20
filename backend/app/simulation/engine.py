@@ -40,6 +40,7 @@ from ..automation.state_machine import Event, PumpStateMachine, TransitionResult
 from ..config.alarm_thresholds import ALARM_STARTUP_INHIBIT_S, INTERLOCKS, VIBRATION
 from ..config.pump_parameters import ASSET, FLUID, MOTOR, PUMP
 from ..contracts import Alarm, AssetState, DataSource, FaultType, Telemetry
+from ..health import health_index as visitor_health_index
 from ..physics import pump_model
 from .faults import DEFAULT_RAMP_S, FaultModel
 from .sensors import SensorBus
@@ -380,9 +381,11 @@ class SimulationSession:
             fault, severity = FaultType.SENSOR_FAULT, 1.0
 
         fields = self._vibration_fields(vibration, measured["vibration_rms_mm_s"])
-        health, anomaly = self._condition_indices(severity, measured["vibration_rms_mm_s"], hydraulics["npsh_margin_m"])
+        injected_severity_index, anomaly = self._injected_condition_indices(
+            severity, measured["vibration_rms_mm_s"], hydraulics["npsh_margin_m"]
+        )
 
-        return Telemetry(
+        telemetry = Telemetry(
             timestamp=self._timestamp(),
             elapsed_s=round(self._elapsed_s, 3),
             rpm=measured["rpm"],
@@ -409,7 +412,7 @@ class SimulationSession:
             hydraulic_power_w=hydraulics["hydraulic_power_w"],
             shaft_power_w=hydraulics["shaft_power_w"],
             electrical_power_w=hydraulics["electrical_power_w"],
-            health_index=health,
+            health_index=injected_severity_index,
             anomaly_score=anomaly,
             fault_state=fault.value,
             severity=round(severity, 4),
@@ -418,6 +421,8 @@ class SimulationSession:
             data_source=DataSource.SIMULATION.value,
             sensor_quality=self._sensors.quality,
         )
+        telemetry.health_index = visitor_health_index(telemetry)
+        return telemetry
 
     def _vibration_fields(self, vibration: VibrationState, measured_rms: float) -> dict[str, float]:
         """Vibration part of the frame, scaled by what ACC-101 actually reported.
@@ -446,11 +451,12 @@ class SimulationSession:
             fields.update(self.vibration_feature_hook(vibration))
         return fields
 
-    def _condition_indices(self, severity: float, vibration_rms: float, npsh_margin: float) -> tuple[float, float]:
-        """Heuristic health and anomaly indices.
+    def _injected_condition_indices(self, severity: float, vibration_rms: float, npsh_margin: float) -> tuple[float, float]:
+        """Ground-truth severity index and anomaly estimate.
 
-        Explicitly a placeholder: the ML agent's anomaly detector replaces the
-        anomaly score, and the diagnosis service will own health. It is kept
+        The first return value is not visitor-facing health. It includes the
+        injected fault severity, so it is only a ground-truth severity index.
+        The diagnosis service and API health bars use app.health instead. It is kept
         physically anchored -- vibration against the ISO trip level, NPSH
         margin against the alarm level -- so it is never obviously wrong on
         screen while the model is being trained.

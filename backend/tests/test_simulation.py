@@ -64,7 +64,7 @@ def test_healthy_duty_run_raises_no_alarms_for_60_seconds():
     assert steady.pump_efficiency == pytest.approx(0.486, abs=0.01)
     assert steady.npsh_margin_m > 5.0
     assert steady.fault_state == FaultType.NORMAL.value
-    assert steady.health_index == pytest.approx(100.0, abs=0.5)
+    assert 94.0 <= steady.health_index < 100.0
     assert all(q == SensorQuality.GOOD.value for q in steady.sensor_quality.values())
 
 

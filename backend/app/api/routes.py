@@ -50,6 +50,7 @@ from ..contracts import (
     FaultType,
     Telemetry,
 )
+from ..health import health_index as visitor_health_index, severity_label as visitor_severity_label
 from ..physics import pump_model
 from ..settings import SERVICE_NAME, SERVICE_VERSION, Settings
 from ..signal_processing import (
@@ -1152,12 +1153,12 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
             )
         )
 
-    health = _physics_health(telemetry)
+    health = visitor_health_index(telemetry)
     return Diagnosis(
         detected_condition=condition,
         confidence=round(confidence, 3),
         health_index=health,
-        severity_label=_severity_label(health),
+        severity_label=visitor_severity_label(health),
         physics_evidence=evidence,
         model_evidence=[],
         feature_importance={},
@@ -1166,40 +1167,6 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
         is_sensor_fault=is_sensor_fault,
         physics_model_conflict=False,
     )
-
-
-def _physics_health(telemetry: Telemetry) -> float:
-    """0..100 from measurements only, as the worst of several deviations.
-
-    Worst-of rather than an average: a machine that is perfect on four axes and
-    cavitating on the fifth is not 80 % healthy, it is in trouble.
-    """
-    deviations = [
-        # Vibration against the ISO trip level.
-        (telemetry.vibration_rms_mm_s - _ISO_SATISFACTORY) / (_ISO_UNACCEPTABLE - _ISO_SATISFACTORY),
-        # NPSH margin: zero margin is full deviation.
-        (_NPSH_WARNING_M - telemetry.npsh_margin_m) / 3.0,
-        # Bearing temperature against its trip.
-        (telemetry.bearing_temperature_c - _BEARING_TEMPERATURE_LIMIT.warning)
-        / (_BEARING_TEMPERATURE_LIMIT.trip - _BEARING_TEMPERATURE_LIMIT.warning),
-        (telemetry.motor_temperature_c - _MOTOR_TEMPERATURE_LIMIT.warning)
-        / (_MOTOR_TEMPERATURE_LIMIT.trip - _MOTOR_TEMPERATURE_LIMIT.warning),
-    ]
-    if telemetry.rpm > PUMP.rated_speed_rpm * 0.5:
-        # Flow shortfall only means anything once the machine is up to speed.
-        deviations.append((_DUTY.flow_lpm - telemetry.flow_lpm) / _DUTY.flow_lpm)
-    worst = min(max(max(deviations), 0.0), 1.0)
-    return round(100.0 * (1.0 - worst), 2)
-
-
-def _severity_label(health_index: float) -> str:
-    if health_index >= 90.0:
-        return "none"
-    if health_index >= 65.0:
-        return "minor"
-    if health_index >= 35.0:
-        return "moderate"
-    return "severe"
 
 
 def _recommended_actions(condition: str) -> list[str]:

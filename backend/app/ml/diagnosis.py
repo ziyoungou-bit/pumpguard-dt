@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from ..config.alarm_thresholds import ALARM_LIMITS, VIBRATION
 from ..config.pump_parameters import PUMP
 from ..contracts import Diagnosis, DiagnosisEvidence, FaultType, SensorQuality, Telemetry
+from ..health import health_index, health_terms, severity_label
 from ..physics import pump_model
 from .explain import CONTRIBUTION_BASIS, feature_importance, prediction_contributions
 from .inference import InferenceService, get_service
@@ -442,87 +443,13 @@ def _misalignment_rule(telemetry: Telemetry, scale: float) -> list[DiagnosisEvid
 # Health index
 # --------------------------------------------------------------------------
 
-#: Weights of the five terms. They sum to 100, so a machine failing every term
-#: scores zero and the contribution of each term is readable straight off.
-HEALTH_WEIGHTS: dict[str, float] = {
-    "vibration": 30.0,
-    "temperature": 15.0,
-    "hydraulic": 25.0,
-    "anomaly": 20.0,
-    "sensor": 10.0,
-}
-
 HEALTH_INDEX_LABEL = "Prototype Engineering Health Index"
 HEALTH_INDEX_BASIS = (
-    "Prototype Engineering Health Index: a weighted deduction from 100 across vibration "
-    "(ISO 20816-1 Class I band edges), temperature (against this asset's alarm limits), "
-    "hydraulic performance (duty point from the pump curve), the unsupervised anomaly score "
-    "and instrument validity. It is this project's own composite, useful for trending on this "
-    "asset. It is NOT an ISO-conformant assessment and no ISO conformance is claimed."
+    "Prototype Engineering Health Index: a transparent deduction from 100 across vibration "
+    "(ISO 20816-1 Class I band edges), efficiency against this asset's BEP, NPSH margin "
+    "and bearing temperature. It is this project's own composite, useful for trending on "
+    "this asset. It is NOT an ISO-conformant assessment and no ISO conformance is claimed."
 )
-
-
-def health_index(telemetry: Telemetry, anomaly_score: float = 0.0) -> float:
-    """0..100, 100 = healthy. See `HEALTH_INDEX_BASIS` for exactly what it means."""
-    penalties = health_terms(telemetry, anomaly_score)
-    return round(max(0.0, min(100.0, 100.0 - sum(penalties.values()))), 2)
-
-
-def health_terms(telemetry: Telemetry, anomaly_score: float = 0.0) -> dict[str, float]:
-    """The five deductions, so the index can be shown broken down rather than as one number."""
-    vibration = _fraction(telemetry.vibration_rms_mm_s, ISO_GOOD_MM_S, ISO_TRIP_MM_S)
-
-    motor = _fraction(
-        telemetry.motor_temperature_c,
-        _LIMITS["motor_temperature_high"].warning,
-        _LIMITS["motor_temperature_high"].trip,
-    )
-    bearing = _fraction(
-        telemetry.bearing_temperature_c,
-        _LIMITS["bearing_temperature_high"].warning,
-        _LIMITS["bearing_temperature_high"].trip,
-    )
-    temperature = max(motor, bearing)
-
-    duty = _duty_reference(telemetry.rpm)
-    if duty.valid:
-        # Two independent hydraulic complaints: how far the duty point has moved
-        # and how much NPSH margin is left. The worse one decides.
-        flow_loss = _fraction(1.0 - telemetry.flow_lpm / duty.flow_lpm, 0.15, 1.0)
-        npsh_loss = _fraction(-telemetry.npsh_margin_m, -NPSH_ERODED_M, 0.0)
-        hydraulic = max(flow_loss, npsh_loss)
-    else:
-        hydraulic = 0.0
-
-    bad, uncertain = bad_sensors(telemetry)
-    sensor = 1.0 if bad else (0.5 if uncertain else 0.0)
-
-    return {
-        "vibration": HEALTH_WEIGHTS["vibration"] * vibration,
-        "temperature": HEALTH_WEIGHTS["temperature"] * temperature,
-        "hydraulic": HEALTH_WEIGHTS["hydraulic"] * hydraulic,
-        "anomaly": HEALTH_WEIGHTS["anomaly"] * min(max(float(anomaly_score), 0.0), 1.0),
-        "sensor": HEALTH_WEIGHTS["sensor"] * sensor,
-    }
-
-
-def _fraction(value: float, good: float, bad: float) -> float:
-    """0 at or below `good`, 1 at or above `bad`, linear between."""
-    if bad <= good:
-        return 0.0
-    return min(max((value - good) / (bad - good), 0.0), 1.0)
-
-
-def severity_label(index: float) -> str:
-    """The contract's four-step severity, derived from the health index."""
-    if index >= 85.0:
-        return "none"
-    if index >= 70.0:
-        return "minor"
-    if index >= 45.0:
-        return "moderate"
-    return "severe"
-
 
 # --------------------------------------------------------------------------
 # Recommended actions

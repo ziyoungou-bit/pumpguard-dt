@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { PUMP, solveOperatingPoint } from './pumpPhysics'
 import { healthBreakdown } from './health'
+import sharedCasesRaw from '../../../testdata/health_cases.json?raw'
 import { ZONE_A_B_MM_S, ZONE_B_C_MM_S, vibrationHealthPenalty } from './vibration'
 
 // The machine sitting on its own rated duty point, solved rather than typed.
@@ -24,6 +25,19 @@ const healthy = {
   bearing_temperature_c: 46,
 }
 
+interface SharedHealthCase {
+  name: string
+  running: boolean
+  vibration_rms_mm_s: number
+  pump_efficiency: number
+  bep_efficiency: number
+  npsh_margin_m: number
+  bearing_temperature_c: number
+  expected_health: number
+  expected_scored: boolean
+}
+
+const sharedCases = JSON.parse(sharedCasesRaw) as SharedHealthCase[]
 describe('B1. the printed sum is the applied sum', () => {
   it('adds to exactly what it reports', () => {
     // The check a reader does by hand: subtract every listed term from 100.
@@ -133,6 +147,16 @@ describe('the efficiency term is relative, not absolute', () => {
         bep_efficiency: peak,
       })
       expect(result.terms.find((t) => t.label === 'Efficiency')?.penalty).toBe(0)
+    }
+  })
+})
+
+describe('shared health fixture', () => {
+  it('keeps the TypeScript health formula aligned with the backend fixture', () => {
+    for (const item of sharedCases) {
+      const result = healthBreakdown(item)
+      expect(result.scored, item.name).toBe(item.expected_scored)
+      expect(result.health, item.name).toBeCloseTo(item.expected_health, 6)
     }
   })
 })

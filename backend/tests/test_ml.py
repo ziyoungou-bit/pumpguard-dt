@@ -19,12 +19,14 @@ empty, which is the state of a fresh checkout before `python -m app.ml.train`.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import joblib
 import pytest
 
-from app.contracts import FEATURE_ORDER, AssetState, FaultType, SensorQuality
+from app.contracts import FEATURE_ORDER, AssetState, FaultType, SensorQuality, Telemetry
+from app.health import health_breakdown
 from app.ml import dataset as dataset_module
 from app.ml.dataset import RunSpec, plan_runs, simulate_run
 from app.ml.diagnosis import diagnose, health_index, physics_diagnosis
@@ -39,6 +41,7 @@ from app.ml.inference import (
 from app.simulation import SimulationSession
 
 MODEL_DIR = Path(DEFAULT_MODEL_DIR)
+HEALTH_CASES = json.loads((Path(__file__).resolve().parents[2] / "testdata" / "health_cases.json").read_text())
 requires_model = pytest.mark.skipif(
     not (MODEL_DIR / CLASSIFIER_FILENAME).exists(),
     reason=f"no trained artefacts in {MODEL_DIR}; run `python -m app.ml.train --output models` first",
@@ -357,6 +360,51 @@ def test_a_frozen_transmitter_is_still_reported_as_an_instrument_fault():
 # ---------------------------------------------------------------------------
 # 8. The health index behaves like a health index
 # ---------------------------------------------------------------------------
+
+def _telemetry_from_health_case(item: dict) -> Telemetry:
+    state = AssetState.RUNNING.value if item["running"] else AssetState.OFF.value
+    return Telemetry(
+        timestamp="2026-08-19T00:00:00+00:00",
+        elapsed_s=0.0,
+        rpm=1450.0 if item["running"] else 0.0,
+        flow_lpm=115.52 if item["running"] else 0.0,
+        pump_head_m=7.59 if item["running"] else 0.0,
+        suction_pressure_kpa=92.0,
+        discharge_pressure_kpa=166.3,
+        differential_pressure_kpa=74.3,
+        motor_current_a=2.165 if item["running"] else 0.0,
+        motor_temperature_c=56.0,
+        bearing_temperature_c=float(item["bearing_temperature_c"]),
+        vibration_x_mm_s=0.0,
+        vibration_y_mm_s=0.0,
+        vibration_z_mm_s=0.0,
+        vibration_rms_mm_s=float(item["vibration_rms_mm_s"]),
+        vibration_peak_mm_s=0.0,
+        crest_factor=1.414,
+        amplitude_1x_mm_s=0.0,
+        amplitude_2x_mm_s=0.0,
+        high_frequency_energy=0.0,
+        dominant_frequency_hz=0.0,
+        rotational_frequency_hz=24.1667 if item["running"] else 0.0,
+        pump_efficiency=float(item["pump_efficiency"]),
+        hydraulic_power_w=0.0,
+        shaft_power_w=0.0,
+        electrical_power_w=0.0,
+        health_index=0.0,
+        anomaly_score=0.0,
+        fault_state=FaultType.NORMAL.value,
+        severity=0.0,
+        asset_state=state,
+        npsh_margin_m=float(item["npsh_margin_m"]),
+        sensor_quality={},
+    )
+
+
+def test_backend_health_matches_the_shared_frontend_fixture():
+    for item in HEALTH_CASES:
+        result = health_breakdown(_telemetry_from_health_case(item))
+        assert result.scored is item["expected_scored"], item["name"]
+        assert result.health == pytest.approx(item["expected_health"], abs=1e-6), item["name"]
 
 
 def test_health_index_is_bounded_and_falls_when_the_machine_is_sick():

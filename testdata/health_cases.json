@@ -1,0 +1,79 @@
+[
+  {
+    "name": "healthy duty",
+    "running": true,
+    "vibration_rms_mm_s": 0.612,
+    "pump_efficiency": 0.48736713078337035,
+    "bep_efficiency": 0.48736713078337035,
+    "npsh_margin_m": 7.02,
+    "bearing_temperature_c": 46.0,
+    "expected_health": 97.552,
+    "expected_scored": true
+  },
+  {
+    "name": "zone b vibration",
+    "running": true,
+    "vibration_rms_mm_s": 0.99,
+    "pump_efficiency": 0.48736713078337035,
+    "bep_efficiency": 0.48736713078337035,
+    "npsh_margin_m": 7.02,
+    "bearing_temperature_c": 46.0,
+    "expected_health": 94.08,
+    "expected_scored": true
+  },
+  {
+    "name": "relative efficiency penalty",
+    "running": true,
+    "vibration_rms_mm_s": 0.0,
+    "pump_efficiency": 0.34115699154835925,
+    "bep_efficiency": 0.48736713078337035,
+    "npsh_margin_m": 7.02,
+    "bearing_temperature_c": 46.0,
+    "expected_health": 92.97,
+    "expected_scored": true
+  },
+  {
+    "name": "low npsh margin",
+    "running": true,
+    "vibration_rms_mm_s": 0.0,
+    "pump_efficiency": 0.48736713078337035,
+    "bep_efficiency": 0.48736713078337035,
+    "npsh_margin_m": 0.0,
+    "bearing_temperature_c": 46.0,
+    "expected_health": 93.0,
+    "expected_scored": true
+  },
+  {
+    "name": "hot bearing",
+    "running": true,
+    "vibration_rms_mm_s": 0.0,
+    "pump_efficiency": 0.48736713078337035,
+    "bep_efficiency": 0.48736713078337035,
+    "npsh_margin_m": 7.02,
+    "bearing_temperature_c": 85.0,
+    "expected_health": 93.0,
+    "expected_scored": true
+  },
+  {
+    "name": "stopped guard",
+    "running": false,
+    "vibration_rms_mm_s": 0.0,
+    "pump_efficiency": 0.0,
+    "bep_efficiency": 0.48736713078337035,
+    "npsh_margin_m": 0.0,
+    "bearing_temperature_c": 23.0,
+    "expected_health": 100.0,
+    "expected_scored": false
+  },
+  {
+    "name": "damage floor",
+    "running": true,
+    "vibration_rms_mm_s": 5.5,
+    "pump_efficiency": 0.0,
+    "bep_efficiency": 0.48736713078337035,
+    "npsh_margin_m": -1.0,
+    "bearing_temperature_c": 95.0,
+    "expected_health": 5.0,
+    "expected_scored": true
+  }
+]
