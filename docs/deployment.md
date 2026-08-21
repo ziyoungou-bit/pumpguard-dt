@@ -83,7 +83,7 @@ VITE_WS_URL       = wss://pumpguard-dt-api.onrender.com
 4. Set the site name under Site configuration → Change site name. Use
    `pumpguard-dt`. Note that `pumpguard.netlify.app` is already taken by an
    unrelated project — Netlify subdomains are global and first-come.
-5. Deploy. The URL is then `https://pumpguard-dt.netlify.app`.
+5. Deploy. The URL is then `https://ziyangou-pumpguard-dt.netlify.app`.
 
 ---
 
@@ -92,7 +92,7 @@ VITE_WS_URL       = wss://pumpguard-dt-api.onrender.com
 Back on Render, set:
 
 ```
-BACKEND_CORS_ORIGINS = https://pumpguard-dt.netlify.app
+BACKEND_CORS_ORIGINS = https://ziyangou-pumpguard-dt.netlify.app
 ```
 
 Exact origin, no trailing slash, no wildcard. A wildcard is refused by the
@@ -159,7 +159,7 @@ opens the network tab will see it.
 |---|---|---|
 | `APP_ENV` | environment name | `production` |
 | `DATA_SOURCE` | which provider feeds the pipeline | `SIMULATION` |
-| `BACKEND_CORS_ORIGINS` | exact allowed origins, comma-separated | `https://pumpguard-dt.netlify.app` |
+| `BACKEND_CORS_ORIGINS` | exact allowed origins, comma-separated | `https://ziyangou-pumpguard-dt.netlify.app` |
 | `DATABASE_URL` | historian storage | `sqlite:///./data/pumpguard.db` |
 | `PORT` | injected by the host | `8000` |
 

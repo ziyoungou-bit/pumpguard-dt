@@ -400,6 +400,21 @@ def _telemetry_from_health_case(item: dict) -> Telemetry:
     )
 
 
+# This is a sampled lock for one coefficient, not a complete cross-language
+# consistency test. It catches someone changing the vibration penalty slope
+# literal. It does not catch formula rewrites that preserve this text by moving
+# the arithmetic elsewhere, changes to other zone slopes, zone boundaries, NPSH
+# penalties, or temperature penalties. Complete coverage requires both sides to
+# assert all outputs for the same fixture set; health_cases.json already does
+# that semantic check on both sides, and this source sentinel is an extra layer.
+# Known weak point: it matches source text, so formatting-only changes can cause
+# false positives. If that happens, update the matched string; do not delete the
+# test.
+def test_frontend_vibration_penalty_coefficients_stay_aligned():
+    frontend_vibration = Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "vibration.ts"
+    source = frontend_vibration.read_text(encoding="utf-8")
+    assert "return 4 * inZoneA + 11 * inZoneB + 22 * inZoneC + 40 * inZoneD" in source
+
 def test_backend_health_matches_the_shared_frontend_fixture():
     for item in HEALTH_CASES:
         result = health_breakdown(_telemetry_from_health_case(item))

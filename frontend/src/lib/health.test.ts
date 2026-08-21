@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { PUMP, solveOperatingPoint } from './pumpPhysics'
 import { healthBreakdown } from './health'
 import sharedCasesRaw from '../../../testdata/health_cases.json?raw'
+import backendHealthSourceRaw from '../../../backend/app/health.py?raw'
 import { ZONE_A_B_MM_S, ZONE_B_C_MM_S, vibrationHealthPenalty } from './vibration'
 
 // The machine sitting on its own rated duty point, solved rather than typed.
@@ -151,12 +152,29 @@ describe('the efficiency term is relative, not absolute', () => {
   })
 })
 
-describe('shared health fixture', () => {
-  it('keeps the TypeScript health formula aligned with the backend fixture', () => {
-    for (const item of sharedCases) {
-      const result = healthBreakdown(item)
-      expect(result.scored, item.name).toBe(item.expected_scored)
-      expect(result.health, item.name).toBeCloseTo(item.expected_health, 6)
-    }
+// This is a sampled lock for one coefficient, not a complete cross-language
+// consistency test. It catches someone changing the vibration penalty slope
+// literal. It does not catch formula rewrites that preserve this text by moving
+// the arithmetic elsewhere, changes to other zone slopes, zone boundaries, NPSH
+// penalties, or temperature penalties. Complete coverage requires both sides to
+// assert all outputs for the same fixture set; health_cases.json already does
+// that semantic check on both sides, and this source sentinel is an extra layer.
+// Known weak point: it matches source text, so formatting-only changes can cause
+// false positives. If that happens, update the matched string; do not delete the
+// test.
+describe('backend health source contract', () => {
+  it('keeps the backend vibration penalty coefficients aligned with TypeScript', () => {
+    expect(backendHealthSourceRaw).toContain(
+      'return 4.0 * in_zone_a + 11.0 * in_zone_b + 22.0 * in_zone_c + 40.0 * in_zone_d',
+    )
   })
+})
+describe('shared health fixture', () => {
+  for (const item of sharedCases) {
+    it(item.name, () => {
+      const result = healthBreakdown(item)
+      expect(result.scored).toBe(item.expected_scored)
+      expect(result.health).toBeCloseTo(item.expected_health, 6)
+    })
+  }
 })
