@@ -315,8 +315,8 @@ def health(request: Request) -> dict[str, Any]:
 
 @router.post("/api/session")
 def create_session(response: Response, manager: SessionManager = Depends(get_manager)) -> dict[str, Any]:
-    """Mint a session. Always a new one, even if the caller sent an id."""
-    session = manager.create()
+    """Mint a session. In single-instance mode this resolves to the shared one."""
+    session = manager.get_or_create(None)
     response.headers["X-Session-Id"] = session.id
     return {
         "session_id": session.id,
