@@ -89,6 +89,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tick_interval_s=settings.tick_interval_s,
         idle_timeout_s=settings.session_idle_timeout_s,
         max_sessions=settings.max_sessions,
+        single_instance=settings.single_instance_sessions,
         historian=historian,
         replay_store=replay_store,
     )

@@ -220,7 +220,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       socket.onmessage = (event) => {
         try {
-          const frame = JSON.parse(event.data as string) as Telemetry
+          const message = JSON.parse(event.data as string) as Record<string, unknown>
+          if (message.type === 'session') {
+            if (typeof message.session_id === 'string') {
+              api.setSessionId(message.session_id)
+              setSessionId(message.session_id)
+            }
+            return
+          }
+          // Unknown typed control messages must be recorded rather than
+          // silently discarded; otherwise a contract drift looks like stale UI.
+          if (typeof message.type === 'string') {
+            console.warn('Unknown websocket message type', message.type)
+            return
+          }
+          const frame = message as unknown as Telemetry
           // Guard against a payload that parses but is not Telemetry: without
           // this a stray message would blank every gauge with undefined.
           if (typeof frame?.rpm !== 'number' || typeof frame?.vibration_rms_mm_s !== 'number') return

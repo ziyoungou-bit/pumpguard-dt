@@ -37,6 +37,10 @@ DEVELOPMENT_CORS_ORIGINS: tuple[str, ...] = (
     "http://127.0.0.1:5173",
 )
 
+# The public static frontend for this portfolio demo. Still an exact origin,
+# never a wildcard; it is the origin browsers actually send in production.
+PRODUCTION_CORS_ORIGINS: tuple[str, ...] = ("https://ziyangou-pumpguard-dt.netlify.app",)
+
 
 def _env(name: str, default: str) -> str:
     value = os.environ.get(name)
@@ -70,6 +74,10 @@ def _env_float(name: str, default: float, minimum: float, maximum: float) -> flo
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
     return int(_env_float(name, float(default), float(minimum), float(maximum)))
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = _env(name, "true" if default else "false").lower()
+    return raw in ("1", "true", "yes", "on")
+
 
 def _parse_origins(raw: str) -> tuple[str, ...]:
     """Comma-separated exact origins. `*` is dropped, never honoured."""
@@ -95,6 +103,7 @@ class Settings:
     telemetry_rate_hz: float
     session_idle_timeout_s: float
     max_sessions: int
+    single_instance_sessions: bool
     model_dir: str
     #: Retention. A public demo left open for a week must not fill the disk, so
     #: the historian is a rolling window and not an archive.
@@ -137,7 +146,9 @@ def load_settings() -> Settings:
     """Read the environment. Called once by `get_settings`, and by tests directly."""
     app_env = _env("APP_ENV", "development")
     origins = _parse_origins(_env("BACKEND_CORS_ORIGINS", ""))
-    if not origins and app_env.lower() not in ("production", "prod"):
+    if app_env.lower() in ("production", "prod"):
+        origins = tuple(dict.fromkeys((*origins, *PRODUCTION_CORS_ORIGINS)))
+    elif not origins:
         origins = DEVELOPMENT_CORS_ORIGINS
 
     raw_source = _env("DATA_SOURCE", DataSource.SIMULATION.value).upper()
@@ -161,6 +172,7 @@ def load_settings() -> Settings:
         # numpy RNG. 200 of them is a handful of megabytes, and the cap exists
         # so a crawler opening the public URL in a loop cannot exhaust memory.
         max_sessions=_env_int("MAX_SESSIONS", 200, 1, 10_000),
+        single_instance_sessions=_env_bool("SINGLE_INSTANCE_SESSIONS", True),
         model_dir=_env("MODEL_DIR", "models"),
         # 18 000 ticks is one hour at 5 Hz.
         history_max_ticks_per_session=_env_int("HISTORY_MAX_TICKS_PER_SESSION", 18_000, 60, 5_000_000),
@@ -176,6 +188,7 @@ def get_settings() -> Settings:
 
 __all__ = [
     "DEVELOPMENT_CORS_ORIGINS",
+    "PRODUCTION_CORS_ORIGINS",
     "SERVICE_NAME",
     "SERVICE_VERSION",
     "Settings",

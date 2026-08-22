@@ -153,6 +153,7 @@ class SessionManager:
         tick_interval_s: float,
         idle_timeout_s: float,
         max_sessions: int,
+        single_instance: bool = False,
         historian: Historian | None = None,
         replay_store: ReplayStore | None = None,
     ) -> None:
@@ -160,6 +161,7 @@ class SessionManager:
         self.tick_interval_s = tick_interval_s
         self.idle_timeout_s = idle_timeout_s
         self.max_sessions = max_sessions
+        self.single_instance = single_instance
         self.historian = historian
         self.replay_store = replay_store
 
@@ -235,6 +237,12 @@ class SessionManager:
         visitor whose tab was idle over lunch should find a working machine when
         they come back, not an error dialog explaining session lifetimes.
         """
+        if self.single_instance:
+            with self._lock:
+                session = next(iter(self._sessions.values()), None)
+            if session is not None:
+                session.touch()
+                return session
         return self.get(session_id) or self.create()
 
     # -- eviction ----------------------------------------------------------
