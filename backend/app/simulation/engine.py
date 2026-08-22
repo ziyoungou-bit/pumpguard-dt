@@ -132,6 +132,7 @@ class SimulationSession:
 
         self.valve_opening: float = 1.0
         self._elapsed_s: float = 0.0
+        self._run_elapsed_s: float = 0.0
         self._wall_clock_start = datetime.now(timezone.utc)
         self._truth: dict[str, float] = {}
         self.last_telemetry: Telemetry | None = None
@@ -163,6 +164,15 @@ class SimulationSession:
 
         measured = self._measure(dt, rpm, hydraulics, vibration)
         self._evaluate_protection(dt, measured)
+
+        if self._machine.state in (
+            AssetState.STARTING,
+            AssetState.RUNNING,
+            AssetState.STOPPING,
+        ):
+            self._run_elapsed_s += dt
+        elif self._machine.state in (AssetState.OFF, AssetState.E_STOP):
+            self._run_elapsed_s = 0.0
 
         telemetry = self._build_telemetry(measured, hydraulics, vibration, effects)
         self.last_telemetry = telemetry
@@ -387,7 +397,7 @@ class SimulationSession:
 
         telemetry = Telemetry(
             timestamp=self._timestamp(),
-            elapsed_s=round(self._elapsed_s, 3),
+            elapsed_s=round(self._run_elapsed_s, 3),
             rpm=measured["rpm"],
             flow_lpm=measured["flow_lpm"],
             pump_head_m=hydraulics["head_m"],
@@ -539,6 +549,8 @@ class SimulationSession:
         else:
             return self._response(False, f"unknown command {name!r}")
 
+        if self._machine.state in (AssetState.OFF, AssetState.E_STOP):
+            self._run_elapsed_s = 0.0
         return self._response(result.accepted, result.reason)
 
     def _reset(self) -> TransitionResult:

@@ -44,6 +44,7 @@ export interface LocalSimState {
   /** Sensor noise multiplier, 0..1, from the Simulation Lab. */
   noise: number
   auto_mode: boolean
+  simulation_elapsed_s: number
   elapsed_s: number
   operating_hours: number
   motor_temperature_c: number
@@ -63,6 +64,7 @@ export function initialLocalSimState(): LocalSimState {
     severity: 0,
     noise: 0.05,
     auto_mode: true,
+    simulation_elapsed_s: 0,
     elapsed_s: 0,
     operating_hours: 1284.5,
     motor_temperature_c: THERMAL.ambient_c,
@@ -127,7 +129,12 @@ export function applyCommand(state: LocalSimState, command: ScadaCommand): Local
 
   switch (command) {
     case 'start':
-      return { ...state, asset_state: AssetState.STARTING, blocked_reason: '' }
+      return {
+        ...state,
+        asset_state: AssetState.STARTING,
+        elapsed_s: 0,
+        blocked_reason: '',
+      }
     case 'stop':
       return { ...state, asset_state: AssetState.STOPPING, blocked_reason: '' }
     case 'reset':
@@ -136,15 +143,23 @@ export function applyCommand(state: LocalSimState, command: ScadaCommand): Local
         asset_state: AssetState.OFF,
         fault_state: FaultType.NORMAL,
         severity: 0,
+        elapsed_s: 0,
         blocked_reason: '',
       }
     case 'estop':
-      return { ...state, asset_state: AssetState.E_STOP, rpm: 0, blocked_reason: '' }
+      return {
+        ...state,
+        asset_state: AssetState.E_STOP,
+        rpm: 0,
+        elapsed_s: 0,
+        blocked_reason: '',
+      }
     case 'maintenance':
       return {
         ...state,
         asset_state:
           state.asset_state === AssetState.MAINTENANCE ? AssetState.OFF : AssetState.MAINTENANCE,
+        elapsed_s: 0,
         blocked_reason: '',
       }
     case 'auto':
@@ -183,9 +198,17 @@ export function tickLocalSim(
     rpm = Math.max(0, rpm - RAMP_RPM_PER_S * 2 * dtS)
   }
 
-  const elapsed = state.elapsed_s + dtS
+  const simulationElapsed = state.simulation_elapsed_s + dtS
+  const elapsed =
+    asset_state === AssetState.OFF || asset_state === AssetState.E_STOP
+      ? 0
+      : asset_state === AssetState.STARTING ||
+          asset_state === AssetState.RUNNING ||
+          asset_state === AssetState.STOPPING
+        ? state.elapsed_s + dtS
+        : state.elapsed_s
   const frame = computeFrame({
-    elapsed_s: elapsed,
+    elapsed_s: simulationElapsed,
     dt_s: dtS,
     asset_state,
     rpm,
@@ -217,12 +240,17 @@ export function tickLocalSim(
       ...state,
       asset_state: nextState,
       rpm,
+      simulation_elapsed_s: simulationElapsed,
       elapsed_s: elapsed,
       motor_temperature_c: frame.motor_temperature_c,
       bearing_temperature_c: frame.bearing_temperature_c,
       operating_hours:
         state.operating_hours + (nextState === AssetState.RUNNING ? dtS / 3600 : 0),
     },
-    frame: nextState === asset_state ? frame : { ...frame, asset_state: nextState },
+    frame: {
+      ...frame,
+      asset_state: nextState,
+      elapsed_s: Number(elapsed.toFixed(1)),
+    },
   }
 }

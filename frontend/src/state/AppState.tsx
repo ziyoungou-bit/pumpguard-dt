@@ -382,6 +382,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         valve_opening: demoValveOpening(frame),
         motor_temperature_c: frame.motor_temperature_c,
         bearing_temperature_c: frame.bearing_temperature_c,
+        simulation_elapsed_s: frame.elapsed_s,
         elapsed_s: frame.elapsed_s,
         started_at_ms: Date.now() - frame.elapsed_s * 1000,
       }
@@ -396,13 +397,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const sendCommand = useCallback(
     (command: ScadaCommand) => {
       if (connectionRef.current === 'live') {
-        if (command === 'auto' || command === 'manual' || command === 'maintenance') {
-          setLastCommandFeedback(`${command.toUpperCase()} requested`)
+        if (command === 'auto' || command === 'manual') {
+          const next = applyCommand(simRef.current, command)
+          simRef.current = next
+          setSim(next)
+          setLastCommandFeedback(
+            `${command.toUpperCase()} selected in the browser-side simulation only; the backend controller is unchanged.`,
+          )
           return
         }
-        void api.sendControl(command).then((result) => {
+        if (command === 'maintenance') {
           setLastCommandFeedback(
-            result?.accepted === false
+            'MAINTENANCE is modelled in the browser-side simulation only; the backend controller is unchanged.',
+          )
+          return
+        }
+        setLastCommandFeedback(`${command.toUpperCase()} command sent; waiting for the controller.`)
+        void api.sendControl(command).then((result) => {
+          if (result === null) {
+            setLastCommandFeedback(
+              `${command.toUpperCase()} command failed or timed out -- the API may be waking up; try again.`,
+            )
+            return
+          }
+          setLastCommandFeedback(
+            result.accepted === false
               ? (result.blocked_reason ?? 'Command refused by the controller')
               : `${command.toUpperCase()} accepted`,
           )
@@ -414,7 +433,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const next = applyCommand(simRef.current, command)
       simRef.current = next
       setSim(next)
-      setLastCommandFeedback(blocked ?? `${command.toUpperCase()} accepted`)
+      setLastCommandFeedback(
+        blocked ??
+          (command === 'auto' || command === 'manual'
+            ? `${command.toUpperCase()} selected in the browser-side simulation only; the backend is unavailable.`
+            : `${command.toUpperCase()} applied to the browser-side simulation only; the backend is unavailable.`),
+      )
     },
     [enterInteractive],
   )

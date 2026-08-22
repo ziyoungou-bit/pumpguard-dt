@@ -76,14 +76,14 @@ const COMMANDS: CommandSpec[] = [
     label: 'AUTO',
     icon: Zap,
     variant: 'secondary',
-    description: 'Hand control to the automation layer.',
+    description: 'Select AUTO in the browser-side simulation; the backend controller is unchanged.',
   },
   {
     command: 'manual',
     label: 'MANUAL',
     icon: Hand,
     variant: 'secondary',
-    description: 'Take manual control of the setpoints.',
+    description: 'Select MANUAL in the browser-side simulation; the backend controller is unchanged.',
   },
   {
     command: 'maintenance',
@@ -161,6 +161,10 @@ export function ScadaControl() {
 
   const state = assetStateStatus(telemetry.asset_state)
   const unacknowledged = alarms.filter((alarm) => alarm.state === 'ACTIVE' && !alarm.acknowledged)
+  const elapsedThisRun =
+    telemetry.asset_state === AssetState.OFF || telemetry.asset_state === AssetState.E_STOP
+      ? 0
+      : telemetry.elapsed_s
 
   return (
     <div className="space-y-5">
@@ -284,7 +288,7 @@ export function ScadaControl() {
               <DefinitionRow label="Motor current" value={fmtUnit(telemetry.motor_current_a, 'A', 2)} />
               <DefinitionRow label="Health index" value={`${fmt(telemetry.health_index, 0)} / 100`} />
               <DefinitionRow label="Operating hours" value={fmtUnit(operatingHours, 'h', 1)} />
-              <DefinitionRow label="Elapsed this run" value={fmtDuration(telemetry.elapsed_s)} />
+              <DefinitionRow label="Elapsed this run" value={fmtDuration(elapsedThisRun)} />
             </dl>
           </Card>
 
