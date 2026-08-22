@@ -210,14 +210,44 @@ def physics_diagnosis(telemetry: Telemetry) -> tuple[str, list[DiagnosisEvidence
         )
         return FaultType.SENSOR_FAULT.value, evidence
 
-    evidence.append(
-        _evidence(
-            "Vibration orders, hydraulic duty point and NPSH margin are all within their "
-            "commissioned references",
-            telemetry.vibration_rms_mm_s,
-            "mm/s",
-            f"ISO 20816-1 Class I good below {ISO_GOOD_MM_S} mm/s",
-        )
+    reference_1x = HEALTHY_1X_MM_S * scale
+    reference_2x = HEALTHY_2X_MM_S * scale
+    evidence.extend(
+        [
+            _evidence(
+                "Overall vibration velocity RMS against ISO 20816-1 Class I",
+                telemetry.vibration_rms_mm_s,
+                "mm/s",
+                f"good below {ISO_GOOD_MM_S} mm/s",
+            ),
+            _evidence(
+                "1x rotational amplitude used by the imbalance rule",
+                telemetry.amplitude_1x_mm_s,
+                "mm/s",
+                f"imbalance gate above {ELEVATED_RATIO}x the commissioned "
+                f"{reference_1x:.2f} mm/s at this speed",
+            ),
+            _evidence(
+                "2x rotational amplitude used by the misalignment rule",
+                telemetry.amplitude_2x_mm_s,
+                "mm/s",
+                f"misalignment gate above {ELEVATED_RATIO}x the commissioned "
+                f"{reference_2x:.2f} mm/s at this speed and at least 0.8x measured 1x",
+            ),
+            _evidence(
+                "NPSH margin against the cavitation rule",
+                telemetry.npsh_margin_m,
+                "m",
+                f"cavitation rule fires below {NPSH_ERODED_M} m; low-margin warning at "
+                f"{_LIMITS['npsh_margin_low'].warning} m",
+            ),
+            _evidence(
+                "Pump efficiency against best efficiency",
+                telemetry.pump_efficiency,
+                "ratio",
+                f"eta_BEP {PUMP.bep_efficiency:.4f} at {PUMP.bep_flow_lpm:.0f} L/min",
+            ),
+        ]
     )
     return FaultType.NORMAL.value, evidence
 

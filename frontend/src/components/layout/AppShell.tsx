@@ -12,6 +12,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
+  BrainCircuit,
   Boxes,
   Compass,
   Gauge,
@@ -56,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/app/alarms', label: 'Alarms', icon: AlertTriangle },
   { to: '/app/maintenance', label: 'Maintenance', icon: Wrench },
   { to: '/app/engineering', label: 'Engineering', icon: Activity, advanced: true },
+  { to: '/app/model-performance', label: 'Model Performance', icon: BrainCircuit },
   { to: '/app/architecture', label: 'Architecture', icon: Compass },
   { to: '/app/settings', label: 'Settings', icon: SettingsIcon },
 ]
