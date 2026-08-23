@@ -122,8 +122,10 @@ necessary is stated on the Settings page rather than hidden.
 ### A classifier at 0.82, and why it is on display
 
 The supervised model reaches **grouped accuracy 0.8236**; the unsupervised
-detector reaches **ROC AUC 0.8432**. On a completely healthy frame the random
-forest returns `sensor_fault` at 0.71 against `normal` at 0.28.
+detector reaches **ROC AUC 0.8432**. **25.8 % of healthy frames are classified
+as `sensor_fault`** — 248 of them in the held-out set. On any single frame the
+model usually gets it right; the failure is a quarter of the population, not
+one unlucky sample.
 
 Those numbers are on the
 [Model Performance page](https://ziyangou-pumpguard-dt.netlify.app/app/model-performance),
@@ -139,10 +141,19 @@ features come from the same set of equations as the labels, these metrics are a
 ceiling on what the model could do, not a prediction of how it would behave on a
 real machine.
 
-That has a visible consequence in the product. The Fault Diagnosis page runs the
-deterministic physics rules rather than the classifier, and the
-`physics_model_conflict` flag exists to surface disagreement between the two
-instead of resolving it silently in favour of whichever is more confident.
+Retraining fixed the symptom — the model now scores a healthy frame correctly
+most of the time. It did not fix the cause. The new model learned the new
+simulator distribution just as faithfully as the old one learned the old
+distribution. That is the point: retraining is how you adapt a model to a
+distribution, not how you teach it physics.
+
+That has a visible consequence in the product. The Fault Diagnosis page shows
+the deterministic physics rules and the model's output side by side, as two
+separate columns of evidence rather than one verdict. The
+`physics_model_conflict` flag fires when they disagree — surfacing the
+disagreement instead of resolving it silently in favour of whichever is more
+confident. On a model with a 25.8 % false-alarm rate on healthy frames, deciding
+by confidence would be the wrong rule.
 
 Stating this is not a disclaimer bolted onto a demo. The whole site is built so
 its numbers can be argued with — the Engineering page prints every equation with
