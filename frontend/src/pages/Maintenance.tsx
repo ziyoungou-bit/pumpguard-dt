@@ -33,11 +33,10 @@ interface WorkOrder {
   healthIndex: number
   actions: string[]
   evidence: string[]
-  operatingHours: number
 }
 
 export function Maintenance() {
-  const { telemetry, diagnosis, operatingHours } = useAppState()
+  const { telemetry, diagnosis } = useAppState()
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null)
 
   const health = healthStatus(diagnosis.health_index)
@@ -59,7 +58,6 @@ export function Maintenance() {
         ...diagnosis.physics_evidence.map((item) => `Physics: ${item.statement}`),
         ...diagnosis.model_evidence.map((item) => `Model: ${item.statement}`),
       ],
-      operatingHours,
     })
   }
 
@@ -111,7 +109,6 @@ export function Maintenance() {
 
         <Card title="Operating data">
           <dl>
-            <DefinitionRow label="Operating hours" value={fmtUnit(operatingHours, 'h', 1)} />
             <DefinitionRow label="Asset state" value={telemetry.asset_state} />
             <DefinitionRow label="Speed" value={fmtUnit(telemetry.rpm, 'rpm', 0)} />
             <DefinitionRow
@@ -190,10 +187,6 @@ export function Maintenance() {
               label="Health index at raise"
               value={`${fmt(workOrder.healthIndex, 0)} / 100`}
             />
-            <DefinitionRow
-              label="Operating hours"
-              value={fmtUnit(workOrder.operatingHours, 'h', 1)}
-            />
             <DefinitionRow label="Data source" value="Simulation / recorded demonstration" />
           </dl>
 
@@ -227,8 +220,7 @@ export function Maintenance() {
       )}
 
       <ProvenanceNote>
-        Operating hours are accumulated by the simulation while the asset is running and reset when
-        the page is reloaded. There is no maintenance history database in this prototype.
+        There is no maintenance history database in this prototype.
       </ProvenanceNote>
     </div>
   )

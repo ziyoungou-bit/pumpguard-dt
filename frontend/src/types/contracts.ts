@@ -254,7 +254,6 @@ export interface SystemStatus {
   asset_state: string
   data_source: string
   session_id?: string
-  operating_hours: number
   rpm_setpoint: number
   valve_opening: number
   auto_mode: boolean

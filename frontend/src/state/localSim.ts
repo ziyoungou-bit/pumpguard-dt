@@ -46,7 +46,6 @@ export interface LocalSimState {
   auto_mode: boolean
   simulation_elapsed_s: number
   elapsed_s: number
-  operating_hours: number
   motor_temperature_c: number
   bearing_temperature_c: number
   /** Why the last refused command was refused. Empty when nothing was refused. */
@@ -66,7 +65,6 @@ export function initialLocalSimState(): LocalSimState {
     auto_mode: true,
     simulation_elapsed_s: 0,
     elapsed_s: 0,
-    operating_hours: 1284.5,
     motor_temperature_c: THERMAL.ambient_c,
     bearing_temperature_c: THERMAL.ambient_c,
     blocked_reason: '',
@@ -244,8 +242,6 @@ export function tickLocalSim(
       elapsed_s: elapsed,
       motor_temperature_c: frame.motor_temperature_c,
       bearing_temperature_c: frame.bearing_temperature_c,
-      operating_hours:
-        state.operating_hours + (nextState === AssetState.RUNNING ? dtS / 3600 : 0),
     },
     frame: {
       ...frame,

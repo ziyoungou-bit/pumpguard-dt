@@ -345,7 +345,6 @@ def status(session: Session = Depends(resolve_session)) -> dict[str, Any]:
         "asset_state": provider_status.asset_state,
         "data_source": provider_status.data_source,
         "session_id": session.id,
-        "operating_hours": round(session.operating_hours, 4),
         "rpm_setpoint": round(provider_status.rpm_setpoint, 1),
         "valve_opening": round(provider_status.valve_opening, 4),
         "auto_mode": provider_status.auto_mode,

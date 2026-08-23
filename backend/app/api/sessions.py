@@ -64,9 +64,6 @@ class Session:
         self.created_at = time.monotonic()
         self.last_seen = self.created_at
         self.tick_count = 0
-        #: Simulated seconds spent in RUNNING, which is what an operator means
-        #: by operating hours -- not the age of the browser tab.
-        self.running_seconds = 0.0
 
     # -- clock ------------------------------------------------------------
 
@@ -87,8 +84,6 @@ class Session:
         interval = self.tick_interval_s if dt is None else dt
         telemetry = self.provider.step(interval)
         self.tick_count += 1
-        if telemetry.asset_state == "RUNNING":
-            self.running_seconds += interval
         if self.historian is not None:
             self.historian.record_tick(self.id, telemetry)
             records = self.provider.alarm_records
@@ -119,10 +114,6 @@ class Session:
     @property
     def alarms(self) -> list[Alarm]:
         return self.provider.alarms
-
-    @property
-    def operating_hours(self) -> float:
-        return self.running_seconds / 3600.0
 
     def close(self) -> None:
         self.provider.close()

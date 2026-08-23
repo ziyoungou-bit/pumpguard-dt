@@ -106,7 +106,6 @@ export interface AppStateValue {
   rpmSetpoint: number
   noise: number
   autoMode: boolean
-  operatingHours: number
   blockedReason: string
   lastCommandFeedback: string
 
@@ -579,7 +578,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             : telemetry.rpm || 1450,
       noise: sim.noise,
       autoMode: sim.auto_mode,
-      operatingHours: sim.operating_hours,
       blockedReason: sim.blocked_reason,
       lastCommandFeedback,
       sendCommand,

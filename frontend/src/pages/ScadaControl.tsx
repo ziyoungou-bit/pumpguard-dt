@@ -154,7 +154,6 @@ export function ScadaControl() {
     alarms,
     acknowledgeAlarm,
     autoMode,
-    operatingHours,
     lastCommandFeedback,
     connection,
   } = useAppState()
@@ -287,7 +286,6 @@ export function ScadaControl() {
               <DefinitionRow label="Flow" value={fmtUnit(telemetry.flow_lpm, 'L/min', 1)} />
               <DefinitionRow label="Motor current" value={fmtUnit(telemetry.motor_current_a, 'A', 2)} />
               <DefinitionRow label="Health index" value={`${fmt(telemetry.health_index, 0)} / 100`} />
-              <DefinitionRow label="Operating hours" value={fmtUnit(operatingHours, 'h', 1)} />
               <DefinitionRow label="Elapsed this run" value={fmtDuration(elapsedThisRun)} />
             </dl>
           </Card>
