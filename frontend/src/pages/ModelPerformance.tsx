@@ -178,7 +178,7 @@ function SeverityTable() {
           <div key={row.severity} className="rounded-lg border border-slate-200 bg-white p-3">
             <p className="text-xs font-semibold text-slate-500 uppercase">severity {row.severity.toFixed(1)}</p>
             <p className="numeric mt-2 text-2xl font-semibold text-slate-900">{pct(row.accuracy)}</p>
-            <p className="mt-1 text-xs text-slate-500">support {row.support}</p>
+            <p className="mt-1 text-xs text-slate-500">n = {row.support}</p>
           </div>
         ))}
       </div>
@@ -187,10 +187,13 @@ function SeverityTable() {
         Sensor fault is therefore excluded from this series and remains reported in the confusion
         matrix: the former 1.0 bucket was 96.8% sensor fault, so its 46.0% accuracy was the 44.2%
         sensor-fault recall projected onto a mixed-meaning bucket, not a collapse across all faults
-        at full severity. For comparable injected severity, accuracy rises monotonically from 74.2%
-        at 0.0 to 96.3% at 0.2 and 100% at 0.4, 0.6, and 0.8. The meaningful limitation is at low
-        severity: the early fault stage, where prediction has the most value, is where the model is
-        least reliable.
+        at full severity. The 0.0 point is a rounded 0.2-wide bucket, not a pure zero-strength fault
+        bucket: it contains 960 true normal rows at severity 0 and 9 low-developed fault rows at
+        severity 0.0969. Its 74.2% therefore primarily measures normal versus sensor-fault
+        separability (248 of 960 normal rows were called sensor_fault), not early machine-fault
+        prediction. For comparable injected severity, the plotted accuracy rises monotonically from
+        74.2% at 0.0 to 96.3% at 0.2 and 100% at 0.4, 0.6, 0.8, and 1.0; the low-end point should
+        not be read as a clean early-fault performance estimate.
       </p>
     </>
   )
