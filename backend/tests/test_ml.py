@@ -29,7 +29,7 @@ from app.contracts import FEATURE_ORDER, AssetState, FaultType, SensorQuality, T
 from app.health import health_breakdown
 from app.ml import dataset as dataset_module
 from app.ml.dataset import RunSpec, plan_runs, simulate_run
-from app.ml.diagnosis import diagnose, health_index, physics_diagnosis
+from app.ml.diagnosis import diagnose, health_index, physics_diagnosis, recommended_actions
 from app.ml.inference import (
     CLASSIFIER_FILENAME,
     DEFAULT_MODEL_DIR,
@@ -339,6 +339,18 @@ def test_a_bad_sensor_quality_yields_a_sensor_fault_not_a_mechanical_one():
     assert diagnosis.is_sensor_fault is True
     assert any("FT-101" in item.statement for item in diagnosis.physics_evidence)
     assert any("instrument fault" in action.lower() for action in diagnosis.recommended_actions)
+
+
+def test_recommendations_are_derived_from_the_final_detected_condition():
+    frames = clean_run(FaultType.NORMAL, 0.0, session_id="normal-recommendations")
+    diagnosis = diagnose(frames[-1], InferenceService("missing-models"))
+
+    assert diagnosis.detected_condition == FaultType.NORMAL.value
+    assert diagnosis.recommended_actions == recommended_actions(diagnosis.detected_condition)
+    assert diagnosis.recommended_actions == [
+        "No action. Continue routine monitoring.",
+        "Record the current vibration and duty point as the running baseline.",
+    ]
 
 
 def test_a_frozen_transmitter_is_still_reported_as_an_instrument_fault():

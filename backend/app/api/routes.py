@@ -51,6 +51,7 @@ from ..contracts import (
     Telemetry,
 )
 from ..health import health_index as visitor_health_index, severity_label as visitor_severity_label
+from ..ml.diagnosis import recommended_actions
 from ..physics import pump_model
 from ..settings import SERVICE_NAME, SERVICE_VERSION, Settings
 from ..signal_processing import (
@@ -1161,42 +1162,11 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
         physics_evidence=evidence,
         model_evidence=[],
         feature_importance={},
-        recommended_actions=_recommended_actions(condition),
+        recommended_actions=recommended_actions(condition),
         anomaly_score=round(1.0 - health / 100.0, 4),
         is_sensor_fault=is_sensor_fault,
         physics_model_conflict=False,
     )
-
-
-def _recommended_actions(condition: str) -> list[str]:
-    return {
-        FaultType.NORMAL.value: ["No action. Continue routine monitoring."],
-        FaultType.CAVITATION.value: [
-            "Check the suction strainer and suction line for restriction.",
-            "Verify reservoir level and that the suction valve is fully open.",
-            "Throttle the discharge to reduce flow until the NPSH margin recovers.",
-        ],
-        FaultType.DRY_RUN.value: [
-            "Stop the pump: running dry destroys the mechanical seal within minutes.",
-            "Re-prime and confirm the suction line holds liquid before restarting.",
-        ],
-        FaultType.FLOW_RESTRICTION.value: [
-            "Inspect the discharge line and strainer for blockage.",
-            "Confirm the discharge valve position matches the commanded opening.",
-        ],
-        FaultType.MISALIGNMENT.value: [
-            "Check coupling alignment cold and hot; record the as-found readings.",
-            "Inspect the coupling element and the hold-down bolts for softfoot.",
-        ],
-        FaultType.IMBALANCE.value: [
-            "Inspect the impeller for deposits, erosion or a lost balance weight.",
-            "Trim balance the rotor if the 1x amplitude keeps rising.",
-        ],
-        FaultType.SENSOR_FAULT.value: [
-            "Treat the affected readings as unreliable until the loop is checked.",
-            "Verify the transmitter loop, wiring and power before acting on a diagnosis.",
-        ],
-    }.get(condition, ["Investigate the reported condition."])
 
 
 __all__ = ["MLGateway", "physics_diagnosis", "router"]

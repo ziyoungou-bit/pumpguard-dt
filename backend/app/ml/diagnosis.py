@@ -535,6 +535,11 @@ RECOMMENDED_ACTIONS: dict[str, list[str]] = {
 }
 
 
+def recommended_actions(detected_condition: str) -> list[str]:
+    """Return fresh action data derived from the final diagnosed condition."""
+    return list(RECOMMENDED_ACTIONS.get(detected_condition, []))
+
+
 # --------------------------------------------------------------------------
 # The diagnosis
 # --------------------------------------------------------------------------
@@ -573,7 +578,7 @@ def diagnose(telemetry: Telemetry, service: InferenceService | None = None) -> D
         physics_evidence=physics_evidence,
         model_evidence=model_evidence,
         feature_importance=contributions or feature_importance(service, top_n=6),
-        recommended_actions=list(RECOMMENDED_ACTIONS.get(detected, [])),
+        recommended_actions=recommended_actions(detected),
         anomaly_score=round(float(anomaly), 4),
         is_sensor_fault=detected == FaultType.SENSOR_FAULT.value,
         physics_model_conflict=conflict,
@@ -677,5 +682,6 @@ __all__ = [
     "health_index",
     "health_terms",
     "physics_diagnosis",
+    "recommended_actions",
     "severity_label",
 ]

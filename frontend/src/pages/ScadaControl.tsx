@@ -117,7 +117,7 @@ const TRANSITIONS: { from: string; event: string; to: string }[] = [
   { from: 'RUNNING', event: 'protection trip', to: 'FAULT' },
   { from: 'FAULT', event: 'RESET', to: 'OFF' },
   { from: 'any', event: 'EMERGENCY STOP', to: 'E_STOP' },
-  { from: 'E_STOP', event: 'EMERGENCY STOP', to: 'OFF' },
+  { from: 'E_STOP', event: 'E-STOP released', to: 'OFF' },
   { from: 'OFF', event: 'MAINTENANCE', to: 'MAINTENANCE' },
   { from: 'MAINTENANCE', event: 'MAINTENANCE', to: 'OFF' },
 ]
@@ -237,7 +237,7 @@ export function ScadaControl() {
                 <p className="text-sm font-bold text-red-900">EMERGENCY STOP</p>
                 <p className="mt-0.5 text-xs text-red-800">
                   Removes drive power immediately and latches. Always permitted, from any state.
-                  RESET is required afterwards.
+                  The E-STOP must be released before the controller can be reset.
                 </p>
               </div>
               <button
