@@ -72,9 +72,10 @@ export function FaultDiagnosis() {
           Entry is evaluated only while confirmed is normal: more than half of the latest 25
           temporal ticks must be non-normal, and 15 consecutive ticks must each have an
           instantaneous non-normal class with confidence above 0.70; the class on the 15th tick
-          becomes confirmed. Exit is evaluated only while confirmed is non-normal: 25 consecutive
-          ticks must have fault probability below 0.40. For an instantaneous normal class, fault
-          probability is 1 minus its confidence. The 25-tick majority is not used for exit.
+          becomes confirmed. Exit is evaluated only while confirmed is non-normal: 15 consecutive
+          ticks must each have an instantaneous normal class. The API does not provide the full
+          seven-class probability distribution, so exit does not approximate the confirmed class
+          probability from instantaneous confidence. The 25-tick majority is not used for exit.
         </p>
         <p className="mt-2">
           Diagnosis is polled every 2.5 seconds, while temporal ticks are driven by 5 Hz telemetry.

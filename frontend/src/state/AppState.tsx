@@ -543,10 +543,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   )
 
   const temporalState = useMemo(() => {
-    const faultProbability = instantaneousDiagnosis.detected_condition === FaultType.NORMAL
-      ? 1 - instantaneousDiagnosis.confidence
-      : instantaneousDiagnosis.confidence
-    temporalRef.current = updateTemporalState(temporalRef.current, instantaneousDiagnosis.detected_condition, faultProbability)
+    temporalRef.current = updateTemporalState(
+      temporalRef.current,
+      instantaneousDiagnosis.detected_condition,
+      instantaneousDiagnosis.confidence,
+    )
     return temporalRef.current
   }, [instantaneousDiagnosis, telemetry])
 

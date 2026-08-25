@@ -2,8 +2,7 @@
   windowFrames: 25,
   enterProbability: 0.7,
   enterFrames: 15,
-  exitProbability: 0.4,
-  exitFrames: 25,
+  exitFrames: 15,
 } as const
 
 export type TemporalState = {
@@ -13,12 +12,12 @@ export type TemporalState = {
   exitedFrames: number
 }
 
-export function updateTemporalState(state: TemporalState, instantaneous: string, faultProbability: number): TemporalState {
+export function updateTemporalState(state: TemporalState, instantaneous: string, instantaneousConfidence: number): TemporalState {
   const labels = [...state.labels, instantaneous].slice(-TEMPORAL_DEBOUNCE.windowFrames)
   const nonNormal = labels.filter((label) => label !== 'normal').length
   const majority = nonNormal > labels.length / 2
-  const entering = instantaneous !== 'normal' && faultProbability > TEMPORAL_DEBOUNCE.enterProbability
-  const exiting = faultProbability < TEMPORAL_DEBOUNCE.exitProbability
+  const entering = instantaneous !== 'normal' && instantaneousConfidence > TEMPORAL_DEBOUNCE.enterProbability
+  const exiting = instantaneous === 'normal'
   const enteredFrames = entering ? state.enteredFrames + 1 : 0
   const exitedFrames = exiting ? state.exitedFrames + 1 : 0
   let condition = state.condition
