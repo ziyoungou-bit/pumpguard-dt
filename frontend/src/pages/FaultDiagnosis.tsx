@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Fault Diagnosis.
  *
  * A bare class label is not a diagnosis anyone can act on or argue with, so the
@@ -50,7 +50,7 @@ function EvidenceList({ items, emptyText }: { items: DiagnosisEvidence[]; emptyT
 }
 
 export function FaultDiagnosis() {
-  const { telemetry, diagnosis, connection, diagnosisFromApi } = useAppState()
+  const { telemetry, diagnosis, instantaneousDiagnosis, temporalState, connection, diagnosisFromApi } = useAppState()
   const [showImportance, setShowImportance] = useState(false)
 
   const health = healthStatus(diagnosis.health_index)
@@ -66,6 +66,10 @@ export function FaultDiagnosis() {
         title="Fault Diagnosis"
         description="What the system believes is wrong, how confident it is, and -- more usefully -- the evidence behind that belief."
       />
+
+      <Notice tone="info" title="Temporal debounce">
+        Confirmed condition uses a 25-frame rolling majority with hysteresis: entry requires fault probability above 0.70 for 3 seconds, and exit requires below 0.40 for 5 seconds. This is an industrial debounce that reduces display jitter, not the classifier root cause; see Model Performance for the class overlap evidence.
+      </Notice>
 
       {diagnosis.physics_model_conflict && (
         <Notice tone="warn" title="Physics rules and the classifier disagree">
@@ -86,6 +90,9 @@ export function FaultDiagnosis() {
         <Card title="Detected condition">
           <p className="text-2xl font-semibold text-slate-900">
             {humanise(diagnosis.detected_condition)}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            instantaneous: {humanise(instantaneousDiagnosis.detected_condition)} {instantaneousDiagnosis.confidence.toFixed(2)}, confirmed: {humanise(diagnosis.detected_condition)} ({temporalState.labels.filter((label) => label === diagnosis.detected_condition).length}/{temporalState.labels.length} frames)
           </p>
           <p className="mt-1 text-sm text-slate-600">
             Classified against the seven-condition vocabulary shared by the simulator, the model and

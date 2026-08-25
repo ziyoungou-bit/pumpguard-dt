@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The single source of live truth for the whole app.
  *
  * Connection strategy, in priority order:
@@ -34,9 +34,10 @@ import type { Alarm, Diagnosis, Telemetry } from '../types/contracts'
 import { AssetState, DataSource, FaultType } from '../types/contracts'
 import * as api from '../lib/api'
 import { realtimeSocketUrl } from '../lib/env'
-import { DEMO_FRAMES, DEMO_TICK_S, demoAlarms, demoDiagnosis, demoValveOpening } from '../data/recordedDemo'
+import { DEMO_FRAMES, DEMO_TICK_S, RECOMMENDED_ACTIONS, demoAlarms, demoDiagnosis, demoValveOpening } from '../data/recordedDemo'
 import { PUMP } from '../lib/pumpPhysics'
 import { TICK_INTERVAL_S } from '../lib/pumpParameters.generated'
+import { updateTemporalState, type TemporalState } from '../lib/temporalDebounce'
 import {
   applyCommand,
   commandBlockedReason,
@@ -81,6 +82,8 @@ export interface AppStateValue {
   telemetry: Telemetry
   history: Telemetry[]
   diagnosis: Diagnosis
+  instantaneousDiagnosis: Diagnosis
+  temporalState: TemporalState
   alarms: Alarm[]
   connection: ConnectionMode
   demoMode: DemoMode
@@ -131,6 +134,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [telemetry, setTelemetry] = useState<Telemetry>(DEMO_FRAMES[0])
   const [history, setHistory] = useState<Telemetry[]>([DEMO_FRAMES[0]])
   const [apiDiagnosis, setApiDiagnosis] = useState<Diagnosis | null>(null)
+  const temporalRef = useRef<TemporalState>({ condition: FaultType.NORMAL, labels: [], enteredFrames: 0, exitedFrames: 0 })
   const [apiAlarms, setApiAlarms] = useState<Alarm[] | null>(null)
   const [connection, setConnection] = useState<ConnectionMode>('demo')
   const [demoMode, setDemoMode] = useState<DemoMode>('replay')
@@ -533,10 +537,28 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   )
 
   // ---------------------------------------------------------------- derived
-  const diagnosis = useMemo<Diagnosis>(
+  const instantaneousDiagnosis = useMemo<Diagnosis>(
     () => apiDiagnosis ?? demoDiagnosis(telemetry),
     [apiDiagnosis, telemetry],
   )
+
+  const temporalState = useMemo(() => {
+    const faultProbability = instantaneousDiagnosis.detected_condition === FaultType.NORMAL
+      ? 1 - instantaneousDiagnosis.confidence
+      : instantaneousDiagnosis.confidence
+    temporalRef.current = updateTemporalState(temporalRef.current, instantaneousDiagnosis.detected_condition, faultProbability)
+    return temporalRef.current
+  }, [instantaneousDiagnosis, telemetry])
+
+  const diagnosis = useMemo<Diagnosis>(() => {
+    if (temporalState.condition === instantaneousDiagnosis.detected_condition) return instantaneousDiagnosis
+    return {
+      ...instantaneousDiagnosis,
+      detected_condition: temporalState.condition,
+      is_sensor_fault: temporalState.condition === FaultType.SENSOR_FAULT,
+      recommended_actions: RECOMMENDED_ACTIONS[temporalState.condition] ?? instantaneousDiagnosis.recommended_actions,
+    }
+  }, [instantaneousDiagnosis, temporalState])
 
   const alarms = useMemo<Alarm[]>(() => {
     const base = apiAlarms ?? demoAlarms(telemetry)
@@ -559,6 +581,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       telemetry,
       history,
       diagnosis,
+      instantaneousDiagnosis,
+      temporalState,
       alarms,
       connection,
       demoMode,
@@ -593,6 +617,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       telemetry,
       history,
       diagnosis,
+      instantaneousDiagnosis,
+      temporalState,
       alarms,
       connection,
       demoMode,
