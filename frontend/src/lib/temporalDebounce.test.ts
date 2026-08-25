@@ -3,7 +3,6 @@ import { updateTemporalState, type TemporalState } from './temporalDebounce'
 
 const initialState = (): TemporalState => ({
   condition: 'normal',
-  labels: [],
   enteredFrames: 0,
   exitedFrames: 0,
 })

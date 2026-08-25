@@ -134,7 +134,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [telemetry, setTelemetry] = useState<Telemetry>(DEMO_FRAMES[0])
   const [history, setHistory] = useState<Telemetry[]>([DEMO_FRAMES[0]])
   const [apiDiagnosis, setApiDiagnosis] = useState<Diagnosis | null>(null)
-  const temporalRef = useRef<TemporalState>({ condition: FaultType.NORMAL, labels: [], enteredFrames: 0, exitedFrames: 0 })
+  const temporalRef = useRef<TemporalState>({ condition: FaultType.NORMAL, enteredFrames: 0, exitedFrames: 0 })
   const [apiAlarms, setApiAlarms] = useState<Alarm[] | null>(null)
   const [connection, setConnection] = useState<ConnectionMode>('demo')
   const [demoMode, setDemoMode] = useState<DemoMode>('replay')

@@ -50,7 +50,7 @@ function EvidenceList({ items, emptyText }: { items: DiagnosisEvidence[]; emptyT
 }
 
 export function FaultDiagnosis() {
-  const { telemetry, diagnosis, instantaneousDiagnosis, temporalState, connection, diagnosisFromApi } = useAppState()
+  const { telemetry, diagnosis, instantaneousDiagnosis, connection, diagnosisFromApi } = useAppState()
   const [showImportance, setShowImportance] = useState(false)
 
   const health = healthStatus(diagnosis.health_index)
@@ -69,19 +69,18 @@ export function FaultDiagnosis() {
 
       <Notice tone="info" title="Temporal debounce">
         <p>
-          Entry is evaluated only while confirmed is normal: more than half of the latest 25
-          temporal ticks must be non-normal, and 15 consecutive ticks must each have an
-          instantaneous non-normal class with confidence above 0.70; the class on the 15th tick
-          becomes confirmed. Exit is evaluated only while confirmed is non-normal: 15 consecutive
-          ticks must each have an instantaneous normal class. The API does not provide the full
-          seven-class probability distribution, so exit does not approximate the confirmed class
-          probability from instantaneous confidence. The 25-tick majority is not used for exit.
+          Entry is evaluated only while confirmed is normal: 15 consecutive temporal ticks must
+          each have an instantaneous non-normal class with confidence above 0.70; the class on
+          the 15th tick becomes confirmed. Exit is evaluated only while confirmed is non-normal:
+          15 consecutive ticks must each have an instantaneous normal class. The API does not
+          provide the full seven-class probability distribution, so exit does not approximate the
+          confirmed class probability from instantaneous confidence.
         </p>
         <p className="mt-2">
           Diagnosis is polled every 2.5 seconds, while temporal ticks are driven by 5 Hz telemetry.
-          The same API prediction is therefore counted about 12-13 times, so a 25-tick window
-          contains only about two independent predictions. This debounce reduces display jitter but
-          does not resolve classifier overlap; see Model Performance.
+          The same API prediction is therefore counted about 12-13 times, so 15 consecutive
+          confirmation ticks typically contain only about one or two independent predictions. This
+          debounce reduces display jitter but does not resolve classifier overlap; see Model Performance.
         </p>
       </Notice>
 
@@ -110,13 +109,6 @@ export function FaultDiagnosis() {
             {instantaneousDiagnosis.confidence.toFixed(2)}, confirmed:{' '}
             {humanise(diagnosis.detected_condition)}
           </p>
-          {diagnosis.detected_condition === 'normal' && (
-            <p className="mt-1 text-xs text-slate-500">
-              Entry criterion only:{' '}
-              {temporalState.labels.filter((label) => label !== 'normal').length}/
-              {temporalState.labels.length} temporal ticks are non-normal.
-            </p>
-          )}
           <p className="mt-1 text-sm text-slate-600">
             Classified against the seven-condition vocabulary shared by the simulator, the model and
             this interface.

@@ -251,6 +251,11 @@ These are decisions, not an outstanding to-do list.
 - **The API runs on a free tier.** First-call latency after a long idle period is
   a platform property, mitigated by scheduled warming and stated on the Settings
   page.
+- **Temporal confirmation reuses polled predictions.** Diagnosis is polled every
+  2.5 seconds while the debounce is driven by 5 Hz telemetry, so consecutive
+  ticks are not independent classifier samples. Running prediction at 5 Hz was
+  rejected: three independent samples would still be statistically weak, while
+  the added inference load is unsuitable for the 0.1-CPU free instance.
 - **The PLC layer is a software equivalent.** The state machine and interlocks
   are real and tested, but they run as Python, not as ladder or structured text
   on PLC hardware 鈥?so no scan-cycle timing, no I/O module behaviour and no
