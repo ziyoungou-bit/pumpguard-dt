@@ -68,7 +68,20 @@ export function FaultDiagnosis() {
       />
 
       <Notice tone="info" title="Temporal debounce">
-        Confirmed condition uses a 25-frame rolling majority with hysteresis: entry requires fault probability above 0.70 for 3 seconds, and exit requires below 0.40 for 5 seconds. This is an industrial debounce that reduces display jitter, not the classifier root cause; see Model Performance for the class overlap evidence.
+        <p>
+          Entry is evaluated only while confirmed is normal: more than half of the latest 25
+          temporal ticks must be non-normal, and 15 consecutive ticks must each have an
+          instantaneous non-normal class with confidence above 0.70; the class on the 15th tick
+          becomes confirmed. Exit is evaluated only while confirmed is non-normal: 25 consecutive
+          ticks must have fault probability below 0.40. For an instantaneous normal class, fault
+          probability is 1 minus its confidence. The 25-tick majority is not used for exit.
+        </p>
+        <p className="mt-2">
+          Diagnosis is polled every 2.5 seconds, while temporal ticks are driven by 5 Hz telemetry.
+          The same API prediction is therefore counted about 12-13 times, so a 25-tick window
+          contains only about two independent predictions. This debounce reduces display jitter but
+          does not resolve classifier overlap; see Model Performance.
+        </p>
       </Notice>
 
       {diagnosis.physics_model_conflict && (
@@ -92,24 +105,38 @@ export function FaultDiagnosis() {
             {humanise(diagnosis.detected_condition)}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            instantaneous: {humanise(instantaneousDiagnosis.detected_condition)} {instantaneousDiagnosis.confidence.toFixed(2)}, confirmed: {humanise(diagnosis.detected_condition)} (window: {temporalState.labels.filter((label) => label !== 'normal').length}/{temporalState.labels.length} non-normal frames)
+            instantaneous: {humanise(instantaneousDiagnosis.detected_condition)}{' '}
+            {instantaneousDiagnosis.confidence.toFixed(2)}, confirmed:{' '}
+            {humanise(diagnosis.detected_condition)}
           </p>
+          {diagnosis.detected_condition === 'normal' && (
+            <p className="mt-1 text-xs text-slate-500">
+              Entry criterion only:{' '}
+              {temporalState.labels.filter((label) => label !== 'normal').length}/
+              {temporalState.labels.length} temporal ticks are non-normal.
+            </p>
+          )}
           <p className="mt-1 text-sm text-slate-600">
             Classified against the seven-condition vocabulary shared by the simulator, the model and
             this interface.
           </p>
         </Card>
 
-        <Card title="Confidence">
+        <Card title="Instantaneous confidence">
           <p className="numeric text-3xl font-semibold text-slate-900">
-            {fmtPercent(diagnosis.confidence, 0)}
+            {fmtPercent(instantaneousDiagnosis.confidence, 0)}
           </p>
           <div className="mt-3">
-            <Meter value={diagnosis.confidence * 100} tone="info" label="Classifier confidence" />
+            <Meter
+              value={instantaneousDiagnosis.confidence * 100}
+              tone="info"
+              label="Instantaneous classifier confidence"
+            />
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            Classifier probability for the reported class. Not a probability that the machine is
-            actually faulty.
+            Classifier probability for the instantaneous class shown beside the confirmed
+            condition. It is not the probability of the confirmed class when those labels differ,
+            nor a probability that the machine is actually faulty.
           </p>
         </Card>
 
