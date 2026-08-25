@@ -172,15 +172,27 @@ function RocChart() {
 
 function SeverityTable() {
   return (
-    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {metrics.severity_accuracy.map((row) => (
-        <div key={row.severity} className="rounded-lg border border-slate-200 bg-white p-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase">severity {row.severity.toFixed(1)}</p>
-          <p className="numeric mt-2 text-2xl font-semibold text-slate-900">{pct(row.accuracy)}</p>
-          <p className="mt-1 text-xs text-slate-500">support {row.support}</p>
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {metrics.severity_accuracy.map((row) => (
+          <div key={row.severity} className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase">severity {row.severity.toFixed(1)}</p>
+            <p className="numeric mt-2 text-2xl font-semibold text-slate-900">{pct(row.accuracy)}</p>
+            <p className="mt-1 text-xs text-slate-500">support {row.support}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-sm leading-6 text-slate-600">
+        Severity is injected fault intensity, but sensor-fault telemetry fixes severity at 1.0.
+        Sensor fault is therefore excluded from this series and remains reported in the confusion
+        matrix: the former 1.0 bucket was 96.8% sensor fault, so its 46.0% accuracy was the 44.2%
+        sensor-fault recall projected onto a mixed-meaning bucket, not a collapse across all faults
+        at full severity. For comparable injected severity, accuracy rises monotonically from 74.2%
+        at 0.0 to 96.3% at 0.2 and 100% at 0.4, 0.6, and 0.8. The meaningful limitation is at low
+        severity: the early fault stage, where prediction has the most value, is where the model is
+        least reliable.
+      </p>
+    </>
   )
 }
 
@@ -235,7 +247,7 @@ export function ModelPerformance() {
         </div>
       </Card>
 
-      <Card title="Accuracy by injected severity" subtitle="Low severity is where early prediction would matter most, and the model is least reliable there.">
+      <Card title="Accuracy by injected severity" subtitle="Machine conditions only; sensor fault is reported separately in the confusion matrix.">
         <SeverityTable />
       </Card>
 

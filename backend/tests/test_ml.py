@@ -23,6 +23,7 @@ import json
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pytest
 
 from app.contracts import FEATURE_ORDER, AssetState, FaultType, SensorQuality, Telemetry
@@ -38,6 +39,7 @@ from app.ml.inference import (
     ModelBundle,
     feature_vector,
 )
+from app.ml.train import _severity_accuracy
 from app.simulation import SimulationSession
 
 MODEL_DIR = Path(DEFAULT_MODEL_DIR)
@@ -351,6 +353,17 @@ def test_recommendations_are_derived_from_the_final_detected_condition():
         "No action. Continue routine monitoring.",
         "Record the current vibration and duty point as the running baseline.",
     ]
+
+
+def test_severity_accuracy_excludes_sensor_fault_encoded_as_one():
+    severity = np.asarray([0.0, 0.8, 1.0, 1.0])
+    truth = np.asarray(["normal", "imbalance", "cavitation", "sensor_fault"], dtype=object)
+    predicted = np.asarray(["normal", "imbalance", "cavitation", "normal"], dtype=object)
+
+    rows = _severity_accuracy(severity, truth, predicted)
+    full_severity = next(row for row in rows if row["severity"] == 1.0)
+
+    assert full_severity == {"severity": 1.0, "accuracy": 1.0, "support": 1}
 
 
 def test_a_frozen_transmitter_is_still_reported_as_an_instrument_fault():

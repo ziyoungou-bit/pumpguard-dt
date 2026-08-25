@@ -334,8 +334,8 @@ export const MODEL_PERFORMANCE = {
     },
     {
       "severity": 1.0,
-      "accuracy": 0.46005154639175255,
-      "support": 776
+      "accuracy": 1.0,
+      "support": 25
     }
   ],
   "leakage_check": {

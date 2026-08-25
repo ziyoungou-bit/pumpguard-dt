@@ -203,11 +203,18 @@ def _severity_bucket(value: float) -> float:
 
 
 def _severity_accuracy(severity: np.ndarray, y_true: np.ndarray, y_pred: np.ndarray) -> list[dict]:
+    """Accuracy by injected machine-fault severity, excluding sensor faults.
+
+    Sensor-fault telemetry encodes severity as 1.0 regardless of the injected
+    instrument-fault strength. Mixing it into this series makes the final bucket
+    a proxy for sensor-fault recall instead of a machine-fault severity measure.
+    """
     buckets = [round(index / 5.0, 1) for index in range(6)]
     bucketed = np.asarray([_severity_bucket(float(value)) for value in severity], dtype=float)
+    machine_fault = y_true != FaultType.SENSOR_FAULT.value
     rows: list[dict] = []
     for bucket in buckets:
-        mask = bucketed == bucket
+        mask = (bucketed == bucket) & machine_fault
         support = int(mask.sum())
         correct = int((y_true[mask] == y_pred[mask]).sum()) if support else 0
         rows.append(
