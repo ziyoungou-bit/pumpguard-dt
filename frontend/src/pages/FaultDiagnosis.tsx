@@ -92,7 +92,7 @@ export function FaultDiagnosis() {
             {humanise(diagnosis.detected_condition)}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            instantaneous: {humanise(instantaneousDiagnosis.detected_condition)} {instantaneousDiagnosis.confidence.toFixed(2)}, confirmed: {humanise(diagnosis.detected_condition)} ({temporalState.labels.filter((label) => label === diagnosis.detected_condition).length}/{temporalState.labels.length} frames)
+            instantaneous: {humanise(instantaneousDiagnosis.detected_condition)} {instantaneousDiagnosis.confidence.toFixed(2)}, confirmed: {humanise(diagnosis.detected_condition)} (window: {temporalState.labels.filter((label) => label !== 'normal').length}/{temporalState.labels.length} non-normal frames)
           </p>
           <p className="mt-1 text-sm text-slate-600">
             Classified against the seven-condition vocabulary shared by the simulator, the model and
