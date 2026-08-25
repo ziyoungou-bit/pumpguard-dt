@@ -173,8 +173,8 @@ function RocChart() {
 function SeverityTable() {
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {metrics.severity_accuracy.map((row) => (
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {metrics.severity_accuracy.filter((row) => row.severity > 0).map((row) => (
           <div key={row.severity} className="rounded-lg border border-slate-200 bg-white p-3">
             <p className="text-xs font-semibold text-slate-500 uppercase">severity {row.severity.toFixed(1)}</p>
             <p className="numeric mt-2 text-2xl font-semibold text-slate-900">{pct(row.accuracy)}</p>
@@ -187,13 +187,12 @@ function SeverityTable() {
         Sensor fault is therefore excluded from this series and remains reported in the confusion
         matrix: the former 1.0 bucket was 96.8% sensor fault, so its 46.0% accuracy was the 44.2%
         sensor-fault recall projected onto a mixed-meaning bucket, not a collapse across all faults
-        at full severity. The 0.0 point is a rounded 0.2-wide bucket, not a pure zero-strength fault
-        bucket: it contains 960 true normal rows at severity 0 and 9 low-developed fault rows at
-        severity 0.0969. Its 74.2% therefore primarily measures normal versus sensor-fault
-        separability (248 of 960 normal rows were called sensor_fault), not early machine-fault
-        prediction. For comparable injected severity, the plotted accuracy rises monotonically from
-        74.2% at 0.0 to 96.3% at 0.2 and 100% at 0.4, 0.6, 0.8, and 1.0; the low-end point should
-        not be read as a clean early-fault performance estimate.
+        at full severity. The former 0.0 bucket is excluded because it mixed 960 normal rows at
+        severity 0 with only 9 fault rows at severity 0.0969. Normal specificity remains in the
+        confusion matrix: 712/960 normal rows were classified as normal, while 248 were classified
+        as sensor_fault. Those 9 fault rows are too few for an early-detection conclusion. The
+        comparable injected-fault series therefore starts at severity 0.2: accuracy is 96.3%, then
+        100% at 0.4, 0.6, 0.8, and 1.0, with each bucket sample count shown.
       </p>
     </>
   )
@@ -250,7 +249,7 @@ export function ModelPerformance() {
         </div>
       </Card>
 
-      <Card title="Accuracy by injected severity" subtitle="Machine conditions only; sensor fault is reported separately in the confusion matrix.">
+      <Card title="Accuracy by injected severity" subtitle="Non-zero machine-fault buckets only; normal and sensor fault are reported separately.">
         <SeverityTable />
       </Card>
 
@@ -271,4 +270,3 @@ export function ModelPerformance() {
     </div>
   )
 }
-
