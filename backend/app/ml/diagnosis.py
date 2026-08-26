@@ -573,6 +573,8 @@ def diagnose(telemetry: Telemetry, service: InferenceService | None = None) -> D
     return Diagnosis(
         detected_condition=detected,
         confidence=round(float(confidence), 4),
+        instantaneous_class=model_condition or physics_condition,
+        instantaneous_confidence=round(float(confidence), 4),
         health_index=index,
         severity_label=severity_label(index),
         physics_evidence=physics_evidence,

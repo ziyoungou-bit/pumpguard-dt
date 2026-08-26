@@ -78,10 +78,26 @@ const POLL_MS = 2500
  */
 const COLD_START_WINDOW_MS = 75000
 
+export interface DiagnosisSnapshot {
+  instantaneousClass: string
+  instantaneousConfidence: number
+  confirmedClass: string
+  healthIndex: number
+  severityLabel: string
+  physicsEvidence: Diagnosis['physics_evidence']
+  modelEvidence: Diagnosis['model_evidence']
+  featureImportance: Diagnosis['feature_importance']
+  recommendedActions: string[]
+  anomalyScore: number
+  isConfirmedSensorFault: boolean
+  physicsModelConflict: boolean
+}
+
 export interface AppStateValue {
   telemetry: Telemetry
   history: Telemetry[]
   diagnosis: Diagnosis
+  diagnosisSnapshot: DiagnosisSnapshot
   instantaneousDiagnosis: Diagnosis
   temporalState: TemporalState
   alarms: Alarm[]
@@ -561,6 +577,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [instantaneousDiagnosis, temporalState])
 
+  const diagnosisSnapshot = useMemo<DiagnosisSnapshot>(
+    () => ({
+      instantaneousClass:
+        instantaneousDiagnosis.instantaneous_class || instantaneousDiagnosis.detected_condition,
+      instantaneousConfidence:
+        instantaneousDiagnosis.instantaneous_confidence ?? instantaneousDiagnosis.confidence,
+      confirmedClass: diagnosis.detected_condition,
+      healthIndex: instantaneousDiagnosis.health_index,
+      severityLabel: instantaneousDiagnosis.severity_label,
+      physicsEvidence: instantaneousDiagnosis.physics_evidence,
+      modelEvidence: instantaneousDiagnosis.model_evidence,
+      featureImportance: instantaneousDiagnosis.feature_importance,
+      recommendedActions: diagnosis.recommended_actions,
+      anomalyScore: instantaneousDiagnosis.anomaly_score,
+      isConfirmedSensorFault: diagnosis.is_sensor_fault,
+      physicsModelConflict: instantaneousDiagnosis.physics_model_conflict,
+    }),
+    [diagnosis, instantaneousDiagnosis],
+  )
   const alarms = useMemo<Alarm[]>(() => {
     const base = apiAlarms ?? demoAlarms(telemetry)
     return base.map((alarm) =>
@@ -582,6 +617,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       telemetry,
       history,
       diagnosis,
+      diagnosisSnapshot,
       instantaneousDiagnosis,
       temporalState,
       alarms,
@@ -618,6 +654,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       telemetry,
       history,
       diagnosis,
+      diagnosisSnapshot,
       instantaneousDiagnosis,
       temporalState,
       alarms,

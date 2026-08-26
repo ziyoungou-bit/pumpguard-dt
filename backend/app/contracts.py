@@ -153,6 +153,8 @@ class Diagnosis:
 
     detected_condition: str  # FaultType value
     confidence: float  # 0..1, from the classifier
+    instantaneous_class: str  # classifier top-1 for this prediction snapshot
+    instantaneous_confidence: float  # probability of instantaneous_class
     health_index: float  # 0..100
     severity_label: str  # "none" | "minor" | "moderate" | "severe"
     physics_evidence: list[DiagnosisEvidence] = field(default_factory=list)

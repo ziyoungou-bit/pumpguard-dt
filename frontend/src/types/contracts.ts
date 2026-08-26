@@ -129,6 +129,8 @@ export interface DiagnosisEvidence {
 export interface Diagnosis {
   detected_condition: string // FaultType value
   confidence: number // 0..1
+  instantaneous_class: string
+  instantaneous_confidence: number // probability of instantaneous_class
   health_index: number // 0..100
   severity_label: string // "none" | "minor" | "moderate" | "severe"
   physics_evidence: DiagnosisEvidence[]

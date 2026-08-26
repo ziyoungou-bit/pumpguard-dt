@@ -142,7 +142,7 @@ class PumpStateMachine:
         if event not in allowed:
             message = f"{event.value} rejected in state {self.state.value}"
             if self.state is AssetState.E_STOP:
-                message += ": emergency stop active, reset it first"
+                message += ": release the E-STOP first"
             elif self.state is AssetState.MAINTENANCE:
                 message += ": asset is under maintenance"
             elif self.state is AssetState.FAULT:

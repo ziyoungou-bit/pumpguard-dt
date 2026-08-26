@@ -50,13 +50,13 @@ function EvidenceList({ items, emptyText }: { items: DiagnosisEvidence[]; emptyT
 }
 
 export function FaultDiagnosis() {
-  const { telemetry, diagnosis, instantaneousDiagnosis, connection, diagnosisFromApi } = useAppState()
+  const { telemetry, diagnosisSnapshot, connection, diagnosisFromApi } = useAppState()
   const [showImportance, setShowImportance] = useState(false)
 
-  const health = healthStatus(diagnosis.health_index)
-  const severity = severityStatus(diagnosis.severity_label)
+  const health = healthStatus(diagnosisSnapshot.healthIndex)
+  const severity = severityStatus(diagnosisSnapshot.severityLabel)
 
-  const importance = Object.entries(diagnosis.feature_importance)
+  const importance = Object.entries(diagnosisSnapshot.featureImportance)
     .map(([feature, value]) => ({ feature, importance: value }))
     .sort((a, b) => b.importance - a.importance)
 
@@ -84,7 +84,7 @@ export function FaultDiagnosis() {
         </p>
       </Notice>
 
-      {diagnosis.physics_model_conflict && (
+      {diagnosisSnapshot.physicsModelConflict && (
         <Notice tone="warn" title="Physics rules and the classifier disagree">
           The deterministic physics rules and the trained classifier have reached different
           conclusions on this frame. That disagreement is shown rather than resolved silently: treat
@@ -92,7 +92,7 @@ export function FaultDiagnosis() {
         </Notice>
       )}
 
-      {diagnosis.is_sensor_fault && (
+      {diagnosisSnapshot.isConfirmedSensorFault && (
         <Notice tone="alarm" title="Suspected sensor fault">
           At least one channel is behaving inconsistently with the others. A diagnosis derived from
           a suspect channel should not be acted on until the instrument has been verified.
@@ -102,12 +102,12 @@ export function FaultDiagnosis() {
       <div className="grid gap-4 lg:grid-cols-4">
         <Card title="Detected condition">
           <p className="text-2xl font-semibold text-slate-900">
-            {humanise(diagnosis.detected_condition)}
+            {humanise(diagnosisSnapshot.confirmedClass)}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            instantaneous: {humanise(instantaneousDiagnosis.detected_condition)}{' '}
-            {instantaneousDiagnosis.confidence.toFixed(2)}, confirmed:{' '}
-            {humanise(diagnosis.detected_condition)}
+            instantaneous: {humanise(diagnosisSnapshot.instantaneousClass)}{' '}
+            {diagnosisSnapshot.instantaneousConfidence.toFixed(2)}, confirmed:{' '}
+            {humanise(diagnosisSnapshot.confirmedClass)}
           </p>
           <p className="mt-1 text-sm text-slate-600">
             Classified against the seven-condition vocabulary shared by the simulator, the model and
@@ -117,11 +117,11 @@ export function FaultDiagnosis() {
 
         <Card title="Instantaneous confidence">
           <p className="numeric text-3xl font-semibold text-slate-900">
-            {fmtPercent(instantaneousDiagnosis.confidence, 0)}
+            {fmtPercent(diagnosisSnapshot.instantaneousConfidence, 0)}
           </p>
           <div className="mt-3">
             <Meter
-              value={instantaneousDiagnosis.confidence * 100}
+              value={diagnosisSnapshot.instantaneousConfidence * 100}
               tone="info"
               label="Instantaneous classifier confidence"
             />
@@ -136,12 +136,12 @@ export function FaultDiagnosis() {
         <Card title="Health index">
           <div className="flex items-baseline gap-2">
             <span className="numeric text-3xl font-semibold text-slate-900">
-              {fmt(diagnosis.health_index, 0)}
+              {fmt(diagnosisSnapshot.healthIndex, 0)}
             </span>
             <span className="text-sm text-slate-500">/ 100</span>
           </div>
           <div className="mt-3">
-            <Meter value={diagnosis.health_index} tone={health.tone} label="Health index" />
+            <Meter value={diagnosisSnapshot.healthIndex} tone={health.tone} label="Health index" />
           </div>
           <div className="mt-2">
             <StatusBadge status={health} size="sm" />
@@ -152,7 +152,7 @@ export function FaultDiagnosis() {
           <StatusBadge status={severity} />
           <p className="mt-2 text-sm text-slate-600">{severity.detail}</p>
           <dl className="mt-3">
-            <DefinitionRow label="Anomaly score" value={fmt(diagnosis.anomaly_score, 2)} />
+            <DefinitionRow label="Anomaly score" value={fmt(diagnosisSnapshot.anomalyScore, 2)} />
             <DefinitionRow label="Injected severity" value={fmt(telemetry.severity, 2)} />
           </dl>
         </Card>
@@ -169,7 +169,7 @@ export function FaultDiagnosis() {
           subtitle="Deterministic rules over measured quantities and published thresholds"
         >
           <EvidenceList
-            items={diagnosis.physics_evidence}
+            items={diagnosisSnapshot.physicsEvidence}
             emptyText="No physics rule fired on this frame."
           />
         </Card>
@@ -184,7 +184,7 @@ export function FaultDiagnosis() {
           subtitle="Statements made by the trained models, not by the physics"
         >
           <EvidenceList
-            items={diagnosis.model_evidence}
+            items={diagnosisSnapshot.modelEvidence}
             emptyText="The model contributed no evidence on this frame."
           />
         </Card>
@@ -233,7 +233,7 @@ export function FaultDiagnosis() {
 
       <Card title="Recommended actions">
         <ol className="space-y-2">
-          {diagnosis.recommended_actions.map((action, index) => (
+          {diagnosisSnapshot.recommendedActions.map((action, index) => (
             <li key={index} className="flex gap-3 text-sm text-slate-700">
               <span className="numeric mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
                 {index + 1}

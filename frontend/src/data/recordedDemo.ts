@@ -341,6 +341,9 @@ export function demoDiagnosis(frame: Telemetry): Diagnosis {
     detected_condition: condition,
     confidence:
       condition === FaultType.NORMAL ? 0.94 : Math.min(0.97, 0.55 + frame.severity * 0.5),
+    instantaneous_class: condition,
+    instantaneous_confidence:
+      condition === FaultType.NORMAL ? 0.94 : Math.min(0.97, 0.55 + frame.severity * 0.5),
     health_index: frame.health_index,
     severity_label: running ? severityLabel(frame.severity, frame.health_index) : 'none',
     physics_evidence: physics,

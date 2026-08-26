@@ -69,7 +69,7 @@ const COMMANDS: CommandSpec[] = [
     label: 'RESET',
     icon: RotateCcw,
     variant: 'secondary',
-    description: 'Clear a latched fault or emergency stop and return to OFF.',
+    description: 'Clear a latched fault and return to OFF. An emergency stop must be released using RELEASE E-STOP.',
   },
   {
     command: 'auto',
@@ -105,7 +105,7 @@ const COMMANDS: CommandSpec[] = [
  *
  * The E_STOP rows match the backend, which was verified by calling it: the
  * latch is released by pressing EMERGENCY STOP again (ESTOP_RESET -> OFF), and
- * RESET under E_STOP is refused with "emergency stop active, reset it first".
+ * RESET under E_STOP is refused with "release the E-STOP first".
  * This table previously claimed E_STOP --RESET--> OFF, which is the transition
  * the controller explicitly rejects.
  */
@@ -294,8 +294,8 @@ export function ScadaControl() {
 
           {telemetry.asset_state === AssetState.E_STOP && (
             <Notice tone="alarm" title="Emergency stop latched">
-              Drive power is removed and the state is latched. Nothing will restart the asset until
-              RESET is issued.
+              Drive power is removed and the state is latched. Release the E-STOP before normal
+              operation can resume.
             </Notice>
           )}
           {telemetry.asset_state === AssetState.FAULT && (

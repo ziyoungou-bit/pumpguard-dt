@@ -943,6 +943,8 @@ class MLGateway:
                 pass
         # Disagreement is information. It is reported, never averaged away.
         result.physics_model_conflict = label != result.detected_condition
+        result.instantaneous_class = label
+        result.instantaneous_confidence = round(float(confidence), 4)
         if confidence > result.confidence:
             result.confidence = float(confidence)
         _ = distribution
@@ -1157,6 +1159,8 @@ def physics_diagnosis(telemetry: Telemetry, alarms: list[Alarm]) -> Diagnosis:
     return Diagnosis(
         detected_condition=condition,
         confidence=round(confidence, 3),
+        instantaneous_class=condition,
+        instantaneous_confidence=round(confidence, 3),
         health_index=health,
         severity_label=visitor_severity_label(health),
         physics_evidence=evidence,
