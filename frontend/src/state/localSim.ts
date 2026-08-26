@@ -95,6 +95,8 @@ export function commandBlockedReason(state: LocalSimState, command: ScadaCommand
         return 'Emergency stop is latched. RESET is required.'
       return null
     case 'reset':
+      if (state.asset_state === AssetState.E_STOP)
+        return 'RESET rejected in state E_STOP: release the E-STOP first.'
       if (state.asset_state === AssetState.RUNNING)
         return 'RESET is not permitted while the asset is RUNNING.'
       if (state.asset_state === AssetState.STARTING)

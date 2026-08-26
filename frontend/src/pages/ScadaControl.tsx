@@ -156,14 +156,14 @@ export function ScadaControl() {
     autoMode,
     lastCommandFeedback,
     connection,
+    sim,
   } = useAppState()
 
-  const state = assetStateStatus(telemetry.asset_state)
+  const offline = connection !== 'live'
+  const displayedAssetState = offline ? sim.asset_state : telemetry.asset_state
+  const state = assetStateStatus(displayedAssetState)
   const unacknowledged = alarms.filter((alarm) => alarm.state === 'ACTIVE' && !alarm.acknowledged)
-  const elapsedThisRun =
-    telemetry.asset_state === AssetState.OFF || telemetry.asset_state === AssetState.E_STOP
-      ? 0
-      : telemetry.elapsed_s
+  const elapsedThisRun = offline ? sim.elapsed_s : telemetry.elapsed_s
 
   return (
     <div className="space-y-5">
@@ -280,14 +280,31 @@ export function ScadaControl() {
 
         <div className="space-y-4">
           <Card title="Controller status">
+            {offline && (
+              <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                Backend unreachable; these readings come from the state machine running in this browser tab.
+              </p>
+            )}
             <dl>
               <DefinitionRow label="Current state" value={state.label} tone={state.tone} />
               <DefinitionRow label="State meaning" value={state.detail} />
               <DefinitionRow label="Control mode" value={autoMode ? 'AUTO' : 'MANUAL'} />
-              <DefinitionRow label="Speed" value={fmtUnit(telemetry.rpm, 'rpm', 0)} />
-              <DefinitionRow label="Flow" value={fmtUnit(telemetry.flow_lpm, 'L/min', 1)} />
-              <DefinitionRow label="Motor current" value={fmtUnit(telemetry.motor_current_a, 'A', 2)} />
-              <DefinitionRow label="Health index" value={`${fmt(telemetry.health_index, 0)} / 100`} />
+              <DefinitionRow
+                label="Speed"
+                value={offline ? fmtUnit(sim.rpm, 'rpm', 0) : fmtUnit(telemetry.rpm, 'rpm', 0)}
+              />
+              <DefinitionRow
+                label="Flow"
+                value={offline ? 'Unavailable' : fmtUnit(telemetry.flow_lpm, 'L/min', 1)}
+              />
+              <DefinitionRow
+                label="Motor current"
+                value={offline ? 'Unavailable' : fmtUnit(telemetry.motor_current_a, 'A', 2)}
+              />
+              <DefinitionRow
+                label="Health index"
+                value={offline ? 'Unavailable' : `${fmt(telemetry.health_index, 0)} / 100`}
+              />
               <DefinitionRow label="Elapsed this run" value={fmtDuration(elapsedThisRun)} />
             </dl>
           </Card>

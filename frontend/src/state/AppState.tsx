@@ -95,6 +95,7 @@ export interface DiagnosisSnapshot {
 
 export interface AppStateValue {
   telemetry: Telemetry
+  sim: LocalSimState
   history: Telemetry[]
   diagnosis: Diagnosis
   diagnosisSnapshot: DiagnosisSnapshot
@@ -615,6 +616,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStateValue>(
     () => ({
       telemetry,
+      sim,
       history,
       diagnosis,
       diagnosisSnapshot,
