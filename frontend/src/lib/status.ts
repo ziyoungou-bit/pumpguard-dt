@@ -12,27 +12,27 @@ import { AssetState, SensorQuality } from '../types/contracts'
 export type Tone = 'ok' | 'warn' | 'alarm' | 'info' | 'idle'
 
 export const TONE_TEXT: Record<Tone, string> = {
-  ok: 'text-green-700',
-  warn: 'text-amber-700',
-  alarm: 'text-red-700',
-  info: 'text-blue-700',
-  idle: 'text-slate-600',
+  ok: 'text-state-ok',
+  warn: 'text-state-warn',
+  alarm: 'text-state-alarm',
+  info: 'text-state-info',
+  idle: 'text-state-idle',
 }
 
 export const TONE_BADGE: Record<Tone, string> = {
-  ok: 'bg-green-50 text-green-800 border-green-300',
-  warn: 'bg-amber-50 text-amber-900 border-amber-300',
-  alarm: 'bg-red-50 text-red-800 border-red-300',
-  info: 'bg-blue-50 text-blue-800 border-blue-300',
-  idle: 'bg-slate-100 text-slate-700 border-slate-300',
+  ok: 'bg-state-ok-bg text-state-ok-on-bg border-state-ok-line',
+  warn: 'bg-state-warn-bg text-state-warn-on-bg border-state-warn-line',
+  alarm: 'bg-state-alarm-bg text-state-alarm-on-bg border-state-alarm-line',
+  info: 'bg-accent-soft text-accent-on-bg border-accent-line',
+  idle: 'bg-line-divider text-ink-body border-line-control',
 }
 
 export const TONE_BAR: Record<Tone, string> = {
-  ok: 'bg-green-600',
-  warn: 'bg-amber-600',
-  alarm: 'bg-red-600',
-  info: 'bg-blue-600',
-  idle: 'bg-slate-500',
+  ok: 'bg-state-ok-fill',
+  warn: 'bg-state-warn-fill',
+  alarm: 'bg-state-alarm-fill',
+  info: 'bg-accent-fill',
+  idle: 'bg-ink-label',
 }
 
 export const TONE_STROKE: Record<Tone, string> = {
