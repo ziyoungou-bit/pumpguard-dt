@@ -12,20 +12,71 @@
  * printing and colour-vision deficiency.
  */
 @theme {
-  --color-ink: #0f172a;
-  --color-ink-soft: #475569;
-  --color-ink-faint: #94a3b8;
-  --color-surface: #ffffff;
-  --color-surface-sunken: #f8fafc;
-  --color-line: #e2e8f0;
-  --color-accent: #1d4ed8;
-  --color-accent-soft: #eff6ff;
+  /* Ink: text foreground, darkest to faintest. */
+  --color-ink: var(--color-slate-900);
+  --color-ink-body: var(--color-slate-700);
+  --color-ink-soft: var(--color-slate-600);
+  --color-ink-label: var(--color-slate-500);
+  --color-ink-faint: var(--color-slate-400);
+  --color-ink-inverse: var(--color-white);
 
-  --color-state-ok: #15803d;
-  --color-state-warn: #b45309;
-  --color-state-alarm: #b91c1c;
-  --color-state-info: #1d4ed8;
-  --color-state-idle: #475569;
+  /* Lines: row dividers, container hairlines, interactive-control borders. */
+  --color-line-divider: var(--color-slate-100);
+  --color-line: var(--color-slate-200);
+  --color-line-control: var(--color-slate-300);
+
+  /* Surfaces. */
+  --color-surface: var(--color-white);
+  --color-surface-sunken: var(--color-slate-50);
+
+  /* Accent: brand blue, used for interaction and for the info tone. */
+  --color-accent-soft: var(--color-blue-50);
+  --color-accent-line: var(--color-blue-300);
+  --color-accent-ring: var(--color-blue-400);
+  --color-accent-line-strong: var(--color-blue-500);
+  --color-accent-fill: var(--color-blue-600);
+  --color-accent: var(--color-blue-700);
+  --color-accent-on-bg: var(--color-blue-800);
+  --color-accent-on-bg-strong: var(--color-blue-900);
+
+  /* State: ok. */
+  --color-state-ok-bg: var(--color-green-50);
+  --color-state-ok-line: var(--color-green-300);
+  --color-state-ok-fill: var(--color-green-600);
+  --color-state-ok: var(--color-green-700);
+  --color-state-ok-on-bg: var(--color-green-800);
+
+  /* State: warn. */
+  --color-state-warn-bg: var(--color-amber-50);
+  --color-state-warn-bg-strong: var(--color-amber-100);
+  --color-state-warn-line-soft: var(--color-amber-200);
+  --color-state-warn-line: var(--color-amber-300);
+  --color-state-warn-line-strong: var(--color-amber-400);
+  --color-state-warn-fill: var(--color-amber-600);
+  --color-state-warn: var(--color-amber-700);
+  --color-state-warn-note: var(--color-amber-800);
+  --color-state-warn-on-bg: var(--color-amber-900);
+  --color-state-warn-on-bg-strong: var(--color-amber-950);
+
+  /* State: alarm. */
+  --color-state-alarm-bg: var(--color-red-50);
+  --color-state-alarm-line: var(--color-red-300);
+  --color-state-alarm-line-strong: var(--color-red-400);
+  --color-state-alarm-fill: var(--color-red-600);
+  --color-state-alarm: var(--color-red-700);
+  --color-state-alarm-on-bg: var(--color-red-800);
+  --color-state-alarm-on-bg-strong: var(--color-red-900);
+
+  /* State aliases: same shade as accent / ink-soft, kept as separate runtime
+   * switches so the info and idle tones can be re-themed without moving the
+   * brand accent or ordinary body text. */
+  --color-state-info: var(--color-blue-700);
+  --color-state-idle: var(--color-slate-600);
+
+  /* A/B identity colours for the energy comparison, not status colours.
+   * These should merge into the warn family once the rewrite is complete. */
+  --color-compare-baseline-bg: var(--color-orange-50);
+  --color-compare-baseline-line: var(--color-orange-300);
 
   --font-sans:
     'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
@@ -61,15 +112,15 @@ body {
 
 @layer components {
   .card {
-    @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+    @apply rounded-lg border border-line bg-surface shadow-sm;
   }
 
   .card-header {
-    @apply flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3;
+    @apply flex items-start justify-between gap-3 border-b border-line px-4 py-3;
   }
 
   .card-title {
-    @apply text-sm font-semibold tracking-wide text-slate-900 uppercase;
+    @apply text-sm font-semibold tracking-wide text-ink uppercase;
   }
 
   .btn {
@@ -78,23 +129,23 @@ body {
   }
 
   .btn-primary {
-    @apply border-blue-700 bg-blue-700 text-white hover:bg-blue-800;
+    @apply border-accent bg-accent text-ink-inverse hover:bg-accent-on-bg;
   }
 
   .btn-secondary {
-    @apply border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+    @apply border-line-control bg-surface text-ink-body hover:bg-surface-sunken;
   }
 
   .btn-danger {
-    @apply border-red-700 bg-red-700 text-white hover:bg-red-800;
+    @apply border-state-alarm bg-state-alarm text-ink-inverse hover:bg-state-alarm-on-bg;
   }
 
   .field-label {
-    @apply block text-xs font-semibold tracking-wide text-slate-500 uppercase;
+    @apply block text-xs font-semibold tracking-wide text-ink-label uppercase;
   }
 
   .table-cell {
-    @apply px-3 py-2 text-sm text-slate-700;
+    @apply px-3 py-2 text-sm text-ink-body;
   }
 }
 
