@@ -78,6 +78,68 @@
   --color-compare-baseline-bg: var(--color-orange-50);
   --color-compare-baseline-line: var(--color-orange-300);
 
+  /* Decorative gradient stops for the landing page chrome. Nothing here carries
+   * meaning, which is exactly why it is kept apart from the state tokens: a
+   * decorative glow must never be mistaken for a status colour. */
+  --color-hero-glow-a: var(--color-blue-300);
+  --color-hero-glow-b: var(--color-blue-200);
+  --color-hero-glow-c: var(--color-slate-300);
+  --color-title-from: var(--color-slate-900);
+  --color-title-to: var(--color-accent);
+  --color-card-highlight: var(--color-accent);
+
+  /* Motion. All of it is decoration.
+   *
+   * Each animation ends with `both` so the final frame sticks: content that
+   * fades in stays visible afterwards, and if the animation never runs at all
+   * (reduced motion, or a stylesheet that fails to load) the element renders at
+   * its natural opacity. Nothing here is load-bearing for legibility. */
+  --animate-rise: rise 0.55s ease-out both;
+  --animate-drift-a: drift-a 24s ease-in-out infinite both;
+  --animate-drift-b: drift-b 31s ease-in-out infinite both;
+  --animate-drift-c: drift-c 38s ease-in-out infinite both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes drift-a {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(7%, 5%, 0) scale(1.09);
+    }
+  }
+
+  @keyframes drift-b {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1.05);
+    }
+    50% {
+      transform: translate3d(-6%, 7%, 0) scale(0.95);
+    }
+  }
+
+  @keyframes drift-c {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(0.97);
+    }
+    50% {
+      transform: translate3d(-8%, -4%, 0) scale(1.06);
+    }
+  }
+
   --font-sans:
     'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
     sans-serif;
