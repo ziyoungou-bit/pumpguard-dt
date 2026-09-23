@@ -88,6 +88,19 @@
   --color-title-to: var(--color-accent);
   --color-card-highlight: var(--color-accent);
 
+  /* Decorative gradient stops for the application shell. Every one of them is
+   * the brand accent at some depth -- a single hue, so none of this can be
+   * mistaken for a status colour. They are aliased rather than used directly
+   * for the same reason the landing tokens are: decoration must be re-themable
+   * without dragging the interaction colour along with it. */
+  --color-brand-rule-from: var(--color-accent);
+  --color-brand-rule-via: var(--color-accent-ring);
+  --color-brand-rule-to: var(--color-accent-on-bg-strong);
+  --color-nav-active-from: var(--color-accent-ring);
+  --color-nav-active-to: var(--color-accent);
+  --color-btn-top: var(--color-accent);
+  --color-btn-bottom: var(--color-accent-on-bg);
+
   /* Motion. All of it is decoration.
    *
    * Each animation ends with `both` so the final frame sticks: content that
@@ -98,6 +111,20 @@
   --animate-drift-a: drift-a 24s ease-in-out infinite both;
   --animate-drift-b: drift-b 31s ease-in-out infinite both;
   --animate-drift-c: drift-c 38s ease-in-out infinite both;
+
+  /* Route change. Opacity only, and short enough to read as a settle rather
+   * than as a load: anything with travel in it makes every page turn look like
+   * the app is fetching something. */
+  --animate-page-in: page-in 0.15s ease-out both;
+
+  @keyframes page-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 
   @keyframes rise {
     from {
@@ -174,7 +201,17 @@ body {
 
 @layer components {
   .card {
-    @apply rounded-lg border border-line bg-surface shadow-sm;
+    @apply rounded-lg border border-line bg-surface shadow-sm transition-shadow duration-200
+      hover:shadow-md;
+  }
+
+  /* A card lifts only when the card *is* the control. A data panel that rises
+   * under the cursor promises a click it does not have, so the plain .card gets
+   * the shadow change and nothing else. */
+  a.card,
+  button.card {
+    @apply transition duration-200 hover:-translate-y-0.5 hover:shadow-lg
+      motion-reduce:transition-none motion-reduce:hover:translate-y-0;
   }
 
   .card-header {
@@ -190,8 +227,15 @@ body {
       font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /* Faint vertical gradient, light at the top, one accent step darker at the
+   * bottom -- the shading a physical key has. Hover brightens the whole thing
+   * rather than re-mixing the stops, which is what the landing CTA already
+   * does; press sinks it 1px. The focus ring is the global one and is left
+   * exactly as it was. */
   .btn-primary {
-    @apply border-accent bg-accent text-ink-inverse hover:bg-accent-on-bg;
+    @apply border-accent bg-linear-to-b from-btn-top to-btn-bottom text-ink-inverse transition
+      hover:brightness-110 active:translate-y-px disabled:hover:brightness-100
+      motion-reduce:transition-none motion-reduce:active:translate-y-0;
   }
 
   .btn-secondary {

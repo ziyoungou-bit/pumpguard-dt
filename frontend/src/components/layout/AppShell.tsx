@@ -66,14 +66,14 @@ function ConnectionIndicator() {
   const { connection, demoMode, wakingUp, waitingSeconds, reconnectAttempts } = useAppState()
   if (connection === 'live') {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-state-ok">
         <Radio className="h-3.5 w-3.5" aria-hidden />
         Live stream connected
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft">
       <Radio className="h-3.5 w-3.5" aria-hidden />
       {wakingUp
         ? `Backend waking up -- ${waitingSeconds} s`
@@ -102,18 +102,18 @@ function ColdStartBanner() {
   if (connection === 'live' || !wakingUp) return null
   const progress = Math.min(100, (waitingSeconds / coldStartWindowSeconds) * 100)
   return (
-    <div className="border-b border-amber-300 bg-amber-50 px-4 py-2.5" role="status" aria-live="polite">
+    <div className="border-b border-state-warn-line bg-state-warn-bg px-4 py-2.5" role="status" aria-live="polite">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1.5">
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-700" aria-hidden />
-        <p className="text-sm font-medium text-amber-900">
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-state-warn" aria-hidden />
+        <p className="text-sm font-medium text-state-warn-on-bg">
           Backend waking up -- cold start takes up to 60 s
         </p>
-        <p className="text-xs text-amber-800">
+        <p className="text-xs text-state-warn-note">
           The API sleeps when idle on its free tier. Meanwhile you are watching the bundled
           recording, not live data. Retrying automatically ({waitingSeconds} s elapsed).
         </p>
         <div
-          className="h-1.5 w-full overflow-hidden rounded-full bg-amber-200"
+          className="h-1.5 w-full overflow-hidden rounded-full bg-state-warn-line-soft"
           role="progressbar"
           aria-valuenow={Math.round(progress)}
           aria-valuemin={0}
@@ -121,7 +121,7 @@ function ColdStartBanner() {
           aria-label="Backend cold start progress"
         >
           <div
-            className="h-full rounded-full bg-amber-600 transition-[width] duration-1000 ease-linear"
+            className="h-full rounded-full bg-state-warn-fill transition-[width] duration-1000 ease-linear"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -144,7 +144,7 @@ function DataSourceBadge() {
   return (
     <div
       className={`flex items-center gap-2 rounded-md border px-3 py-1.5 ${
-        isOffline ? 'border-amber-400 bg-amber-50' : 'border-blue-300 bg-blue-50'
+        isOffline ? 'border-state-warn-line-strong bg-state-warn-bg' : 'border-accent-line bg-accent-soft'
       }`}
       title={
         isReplay
@@ -156,12 +156,12 @@ function DataSourceBadge() {
     >
       <ToneIcon tone={isOffline ? 'warn' : 'info'} className="h-4 w-4" />
       <div className="leading-tight">
-        <p className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+        <p className="text-[10px] font-semibold tracking-wider text-ink-label uppercase">
           Data source
         </p>
         <p
           className={`text-xs font-bold tracking-wide ${
-            isOffline ? 'text-amber-900' : 'text-blue-900'
+            isOffline ? 'text-state-warn-on-bg' : 'text-accent-on-bg-strong'
           }`}
         >
           {label}
@@ -169,7 +169,7 @@ function DataSourceBadge() {
       </div>
       {isReplay && (
         <span
-          className="numeric ml-1 rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+          className="numeric ml-1 rounded border border-state-warn-line bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-state-warn-on-bg"
           title="Position in the recording. Dataset time, not your local clock."
         >
           t+{datasetClock(telemetry.elapsed_s)}
@@ -185,7 +185,17 @@ function Header({ onToggleNav }: { onToggleNav: () => void }) {
   const health = healthStatus(telemetry.health_index)
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
+    <header className="sticky top-0 z-30 border-b border-line bg-surface">
+      {/* The one piece of brand decoration in the application shell: a 2px
+        * accent rule across the full width, sitting above everything the header
+        * carries. Deliberately not a blurred/translucent header -- the three.js
+        * canvas scrolls underneath this bar, and backdrop-blur over a live WebGL
+        * surface costs real frames to produce an effect nobody can see on a
+        * header that is already opaque. */}
+      <div
+        className="h-0.5 w-full bg-linear-to-r from-brand-rule-from via-brand-rule-via to-brand-rule-to"
+        aria-hidden
+      />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
         <button
           type="button"
@@ -197,12 +207,12 @@ function Header({ onToggleNav }: { onToggleNav: () => void }) {
         </button>
 
         <NavLink to="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded bg-slate-900 text-sm font-bold text-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded bg-ink text-sm font-bold text-ink-inverse">
             PG
           </span>
           <span className="hidden leading-tight sm:block">
-            <span className="block text-sm font-semibold text-slate-900">PumpGuard DT</span>
-            <span className="block text-[10px] tracking-wide text-slate-500 uppercase">
+            <span className="block text-sm font-semibold text-ink">PumpGuard DT</span>
+            <span className="block text-[10px] tracking-wide text-ink-label uppercase">
               MTR-101 / P-101
             </span>
           </span>
@@ -210,19 +220,19 @@ function Header({ onToggleNav }: { onToggleNav: () => void }) {
 
         <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+            <span className="text-[10px] font-semibold tracking-wider text-ink-label uppercase">
               Asset state
             </span>
             <StatusBadge status={state} />
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+            <span className="text-[10px] font-semibold tracking-wider text-ink-label uppercase">
               Health
             </span>
-            <span className="numeric text-sm font-semibold text-slate-900">
+            <span className="numeric text-sm font-semibold text-ink">
               {telemetry.health_index.toFixed(0)}
-              <span className="text-xs font-normal text-slate-500"> / 100</span>
+              <span className="text-xs font-normal text-ink-label"> / 100</span>
             </span>
             <StatusBadge status={health} size="sm" />
           </div>
@@ -230,9 +240,9 @@ function Header({ onToggleNav }: { onToggleNav: () => void }) {
           <DataSourceBadge />
         </div>
       </div>
-      <div className="flex items-center justify-between border-t border-slate-100 px-4 py-1">
+      <div className="flex items-center justify-between border-t border-line-divider px-4 py-1">
         <ConnectionIndicator />
-        <span className="hidden text-xs text-slate-500 sm:block">
+        <span className="hidden text-xs text-ink-label sm:block">
           Simulated asset -- engineering portfolio prototype
         </span>
       </div>
@@ -249,7 +259,7 @@ function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }
     <nav
       className={`${
         open ? 'block' : 'hidden'
-      } w-full shrink-0 border-b border-slate-200 bg-white lg:block lg:w-60 lg:border-r lg:border-b-0`}
+      } w-full shrink-0 border-b border-line bg-surface lg:block lg:w-60 lg:border-r lg:border-b-0`}
       aria-label="Main navigation"
     >
       <ul className="sticky top-28 max-h-[calc(100vh-7rem)] overflow-y-auto p-2">
@@ -259,10 +269,14 @@ function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }
               to={item.to}
               onClick={onNavigate}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                `relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-blue-50 text-blue-800'
-                    : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                    ? /* 3px gradient marker down the left edge. It is redundant
+                       * with the tint and with aria-current, which is the point:
+                       * the active row should be findable in a 15-item list at a
+                       * glance, not only by hue. */
+                      'bg-accent-soft text-accent-on-bg before:absolute before:inset-y-1 before:left-0 before:w-[3px] before:rounded-full before:bg-linear-to-b before:from-nav-active-from before:to-nav-active-to'
+                    : 'text-ink-body hover:bg-line-divider hover:text-ink'
                 }`
               }
             >
@@ -285,7 +299,13 @@ export function AppShell() {
       <Header onToggleNav={() => setNavOpen((open) => !open)} />
       <div className="flex flex-1 flex-col lg:flex-row">
         <Sidebar open={navOpen} onNavigate={() => setNavOpen(false)} />
-        <main className="min-w-0 flex-1 p-4 lg:p-6" key={location.pathname}>
+        {/* key= remounts the subtree on every route change, which is what gives
+          * the fade something to fade. Opacity only and 150ms: a page turn
+          * should settle, not travel. */}
+        <main
+          className="animate-page-in min-w-0 flex-1 p-4 motion-reduce:animate-none lg:p-6"
+          key={location.pathname}
+        >
           <Outlet />
         </main>
       </div>
@@ -301,7 +321,7 @@ function MobileNavScrim({ open, onClose }: { open: boolean; onClose: () => void 
     <button
       type="button"
       aria-label="Close navigation"
-      className="fixed inset-0 z-10 bg-slate-900/10 lg:hidden"
+      className="fixed inset-0 z-10 bg-ink/10 lg:hidden"
       onClick={onClose}
     >
       <X className="sr-only" />
