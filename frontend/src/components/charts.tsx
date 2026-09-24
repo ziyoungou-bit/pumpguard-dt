@@ -1008,11 +1008,18 @@ export function TrendChart({
 
   // A limit line inside the domain is drawn where it always was. Outside it, the
   // axis is NOT widened to reach it -- that is what flattened every curve to the
-  // floor -- and a marker above the plot says the limit is off-screen and what
-  // its value is.
+  // floor -- and a marker on the plot's edge says the limit is off-screen and
+  // what its value is.
+  //
+  // Both sides are marked. An unmarked off-screen limit fails silently, and the
+  // low side is the more dangerous of the two: the NPSH margin's trip point is
+  // -0.5 m, below an axis that floors near zero, so a reader would be shown a
+  // margin trend with no indication that it has a cavitation boundary at all.
   const limitSide = warningLevel === undefined ? 'inside' : limitPlacement(warningLevel, axis)
   const showLimitLine = warningLevel !== undefined && limitSide === 'inside'
-  const showLimitMarker = warningLevel !== undefined && limitSide === 'above'
+  const showLimitAbove = warningLevel !== undefined && limitSide === 'above'
+  const showLimitBelow = warningLevel !== undefined && limitSide === 'below'
+  const showLimitMarker = showLimitAbove || showLimitBelow
   const limitColour = '#d03b3b'
 
   // Reserve the bottom strip for the legend only when there is one, and the top
@@ -1053,17 +1060,20 @@ export function TrendChart({
             }}
           />
         )}
-        {warningLevel !== undefined && showLimitMarker && (
+        {showLimitMarker && warningLevel !== undefined && (
           <ReferenceLine
-            y={axis.high}
+            // Pinned to the edge the limit is beyond, with an arrow saying which
+            // way. The line itself is never drawn, because drawing it would mean
+            // widening the axis to reach it.
+            y={showLimitAbove ? axis.high : axis.low}
             stroke="none"
             label={{
-              value: `Limit ${formatTick(warningLevel, axis.digits)} ${unit} ↑`,
-              position: 'top',
+              value: `Limit ${formatTick(warningLevel, axis.digits)} ${unit} ${showLimitAbove ? '↑' : '↓'}`,
+              position: showLimitAbove ? 'top' : 'bottom',
               fill: limitColour,
               fontSize: 10,
               fontWeight: 600,
-              dy: -4,
+              dy: showLimitAbove ? -4 : 4,
             }}
           />
         )}

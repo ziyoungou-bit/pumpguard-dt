@@ -134,6 +134,62 @@ describe('E3. an off-axis limit does not widen the axis', () => {
     expect(limitPlacement(-0.5, axis)).toBe('below')
   })
 
+  it('triggers the below marker for the NPSH cavitation trip', () => {
+    // The chain this branch exists for: npsh_margin_m is the only signal that can
+    // reach it, and its npsh_margin_low.trip is -0.5 m -- below an axis that
+    // floors near zero. If the branch were unimplemented the failure would be
+    // silent: line not drawn, marker not drawn, nothing said.
+    //
+    // Trends.tsx does not wire that limit up yet, so no chart in the app reaches
+    // this path today. The test pins the behaviour for when it does.
+    const axis = trendYAxis([0.8, 2.4], { key: 'npsh_margin_m' })
+    expect(limitPlacement(-0.5, axis)).toBe('below')
+    // A limit that lands inside the same axis takes the line path instead.
+    expect(limitPlacement(0.5, axis)).toBe('inside')
+  })
+
+  it('sides every low-side limit consistently with the axis it is given', () => {
+    // flow_low, suction_pressure_low and motor_current_low are all "low"
+    // direction alarms. Whether they land inside or below the axis depends on
+    // where the data is, not on the alarm's direction: a machine running far
+    // above the trip point puts that trip point off the bottom of the plot.
+    //
+    // So the assertion is the invariant, not a fixed verdict -- `below` must
+    // mean genuinely below, and `inside` must mean genuinely inside. Asserting
+    // a particular verdict per signal would only be restating the span table.
+    const cases: { key: string; units: number[]; limits: number[] }[] = [
+      { key: 'flow_lpm', units: [110, 120], limits: [50, 22, 77] },
+      { key: 'suction_pressure_kpa', units: [85, 95], limits: [40, 55, 70] },
+      { key: 'motor_current_a', units: [2.6, 2.8], limits: [0.9, 1.2, 1.6] },
+    ]
+    for (const { key, units, limits } of cases) {
+      const axis = trendYAxis(units, { key })
+      for (const limit of limits) {
+        const side = limitPlacement(limit, axis)
+        if (side === 'inside') {
+          expect(limit, `${key} ${limit}`).toBeGreaterThanOrEqual(axis.low)
+          expect(limit, `${key} ${limit}`).toBeLessThanOrEqual(axis.high)
+        } else {
+          expect(side, `${key} ${limit}`).toBe('below')
+          expect(limit, `${key} ${limit}`).toBeLessThan(axis.low)
+        }
+      }
+    }
+  })
+
+  it('reaches inside when the data actually sits near the low limit', () => {
+    // The same signal, on a machine running near its trip point rather than far
+    // above it. With a 40 L/min span over 52-60 L/min the axis runs 30-80, so
+    // the warning level at 50 L/min is on the plot and takes the line path --
+    // while the trip at 22 L/min is still below it and takes the marker.
+    //
+    // That split is the point: a single signal can have one limit drawn and
+    // another marked off-screen, and the reader sees both.
+    const axis = trendYAxis([52, 60], { key: 'flow_lpm', minSpanOverride: 40 })
+    expect(limitPlacement(50, axis)).toBe('inside')
+    expect(limitPlacement(22, axis)).toBe('below')
+  })
+
   it('gives a wide excursion an axis that follows it', () => {
     const axis = trendYAxis([110, 122], { key: 'flow_lpm' })
     expect(axis.low).toBeLessThan(110)
