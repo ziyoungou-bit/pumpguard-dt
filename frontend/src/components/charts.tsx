@@ -13,7 +13,9 @@
  *     never carried by colour alone.
  */
 
-import type { ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { trendDomain } from '../lib/chartDomain'
+import { labelRowCount, labelStackTopMargin, layoutLabels, type LabelSlot } from '../lib/chartLabels'
 import {
   Area,
   AreaChart,
@@ -50,6 +52,18 @@ export const SERIES = {
 const GRID = '#e1e0d9'
 const AXIS = '#898781'
 const INK = '#52514e'
+
+/** Matches the YAxis width below, and the space the axis label needs. */
+const Y_AXIS_WIDTH = 56
+
+/**
+ * Marker colours for the spectrum panel. The line frequency is deliberately
+ * outside the categorical series palette: it is an electrical supply frequency,
+ * not a shaft order, and giving it the third series slot would imply it belongs
+ * to the same family as 1x and 2x.
+ */
+const SHELF_2X_COLOUR = '#4a3aa7'
+const LINE_FREQUENCY_COLOUR = '#b4501f'
 
 const axisProps = {
   stroke: AXIS,
@@ -103,9 +117,36 @@ function ChartTooltip({
   )
 }
 
-function ChartFrame({ height, children }: { height: number; children: ReactNode }) {
+/**
+ * Chart container. Reports its own width upward because one chart -- the FFT
+ * spectrum -- has to place reference-line labels in pixel space, and Recharts
+ * exposes plot width only inside its own render tree. Widening the observer
+ * rather than measuring per chart keeps the other charts free of it.
+ */
+function ChartFrame({
+  height,
+  children,
+  onWidth,
+}: {
+  height: number
+  children: ReactNode
+  onWidth?: (width: number) => void
+}) {
+  const measure = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node || !onWidth) return
+      const report = () => onWidth(node.clientWidth)
+      report()
+      if (typeof ResizeObserver === 'undefined') return
+      const observer = new ResizeObserver(report)
+      observer.observe(node)
+      return () => observer.disconnect()
+    },
+    [onWidth],
+  )
+
   return (
-    <div style={{ width: '100%', height }}>
+    <div ref={measure} style={{ width: '100%', height }}>
       <ResponsiveContainer width="100%" height="100%">
         {children as never}
       </ResponsiveContainer>
@@ -225,35 +266,85 @@ export function SpectrumChart({
   lineFrequencyHz?: number
   height?: number
 }) {
-  // Markers alternate label height so that 2x and line frequency -- only 1.67 Hz
-  // apart on this machine -- do not print on top of each other.
-  const marker = (freq: number, text: string, colour: string, dy = 0) => (
-    <ReferenceLine
-      key={text}
-      x={Number(freq.toFixed(2))}
-      stroke={colour}
-      strokeDasharray="4 3"
-      strokeWidth={2}
-      label={{
-        value: text,
-        position: 'top',
-        fill: colour,
-        fontSize: 11,
-        fontWeight: 600,
-        dy,
-      }}
-    />
+  const [frameWidth, setFrameWidth] = useState(0)
+
+  // Markers get a row each when they would otherwise collide. 2x mechanical and
+  // line frequency are 1.67 Hz apart on this machine, which on a 0-1000 Hz axis
+  // is 0.17% of the plot -- their labels are guaranteed to overlap, and the
+  // shaft-order marker moves with rpm while the 50 Hz one does not, so no fixed
+  // offset can keep them apart. layoutLabels decides the rows; the axis title
+  // and the legend keep the margins they already had.
+  const markers = useMemo(() => {
+    const built: { slot: LabelSlot; colour: string }[] = [
+      {
+        slot: { text: `1x  ${rotationalFrequencyHz.toFixed(2)} Hz`, value: rotationalFrequencyHz },
+        colour: SERIES.secondary,
+      },
+      {
+        slot: {
+          text: `2x mech  ${(2 * rotationalFrequencyHz).toFixed(2)} Hz`,
+          value: 2 * rotationalFrequencyHz,
+        },
+        colour: SHELF_2X_COLOUR,
+      },
+    ]
+    if (lineFrequencyHz !== undefined) {
+      built.push({
+        slot: { text: `line  ${lineFrequencyHz.toFixed(2)} Hz`, value: lineFrequencyHz },
+        colour: LINE_FREQUENCY_COLOUR,
+      })
+    }
+    if (bladePassHz !== undefined) {
+      built.push({
+        slot: { text: `BPF  ${bladePassHz.toFixed(0)} Hz`, value: bladePassHz },
+        colour: INK,
+      })
+    }
+    return built.sort((a, b) => a.slot.value - b.slot.value)
+  }, [rotationalFrequencyHz, lineFrequencyHz, bladePassHz])
+
+  const FONT = 11
+  const LINE_HEIGHT = 13
+
+  const dataMax = data.reduce((max, row) => Math.max(max, row.frequency_hz), 0)
+  // The blade-pass marker can sit past the last plotted bin, so it is included
+  // in the domain; otherwise its label would be clamped in from an off-chart x.
+  const domainMax = Math.max(dataMax, bladePassHz ?? 0, 1)
+  const domain: [number, number] = [0, domainMax]
+
+  // The plot area begins after the chart's own left margin AND the y-axis, and
+  // ends before the right margin. Getting this wrong shifts every label off its
+  // own rule by a constant, which on a 0-1000 Hz axis would hide the very
+  // 1.67 Hz separation this layout exists to show.
+  const plotLeft = STACKED_MARGIN.left + Y_AXIS_WIDTH
+  const plotWidth = Math.max(frameWidth - plotLeft - STACKED_MARGIN.right, 0)
+  const placements = layoutLabels(
+    markers.map((marker) => marker.slot),
+    {
+      plotWidth,
+      left: plotLeft,
+      domain,
+      fontSize: FONT,
+      gap: 6,
+    },
   )
+  const rows = labelRowCount(placements)
 
   return (
-    <ChartFrame height={height}>
-      <AreaChart data={data} margin={{ ...STACKED_MARGIN, top: 28 }}>
+    <ChartFrame
+      height={height}
+      onWidth={setFrameWidth}
+    >
+      <AreaChart
+        data={data}
+        margin={{ ...STACKED_MARGIN, top: 28 + labelStackTopMargin(rows, LINE_HEIGHT) }}
+      >
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
         <XAxis
           {...axisProps}
           dataKey="frequency_hz"
           type="number"
-          domain={[0, 'dataMax']}
+          domain={domain}
           tickFormatter={(v: number) => v.toFixed(0)}
           label={xAxisLabel('Frequency (Hz)')}
         />
@@ -280,16 +371,28 @@ export function SpectrumChart({
           fillOpacity={0.12}
           isAnimationActive={false}
         />
-        {marker(rotationalFrequencyHz, `1x  ${rotationalFrequencyHz.toFixed(2)} Hz`, SERIES.secondary)}
-        {marker(
-          2 * rotationalFrequencyHz,
-          `2x mech  ${(2 * rotationalFrequencyHz).toFixed(2)} Hz`,
-          '#4a3aa7',
-        )}
-        {lineFrequencyHz
-          ? marker(lineFrequencyHz, `line  ${lineFrequencyHz.toFixed(2)} Hz`, '#b4501f', 16)
-          : null}
-        {bladePassHz ? marker(bladePassHz, `BPF  ${bladePassHz.toFixed(0)} Hz`, INK) : null}
+        {markers.map((entry, index) => {
+          const placement = placements[index]
+          return (
+            <ReferenceLine
+              key={entry.slot.text}
+              x={Number(entry.slot.value.toFixed(2))}
+              stroke={entry.colour}
+              strokeDasharray="4 3"
+              strokeWidth={2}
+              label={{
+                value: entry.slot.text,
+                fill: entry.colour,
+                fontSize: FONT,
+                fontWeight: 600,
+                position: 'top',
+                // One row per collision, plus a 12px stem so each label still
+                // reads as belonging to its own vertical rule.
+                dy: -(placement.row * LINE_HEIGHT + 12),
+              }}
+            />
+          )
+        })}
         <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
       </AreaChart>
     </ChartFrame>
@@ -846,8 +949,10 @@ export function TrendChart({
   dataKey,
   name,
   unit,
-  height = 180,
+  height = 240,
   warningLevel,
+  showLegend = false,
+  minSpan,
 }: {
   data: { elapsed_s: number }[]
   dataKey: string
@@ -855,10 +960,35 @@ export function TrendChart({
   unit: string
   height?: number
   warningLevel?: number
+  /**
+   * Off by default. A single-series chart already names its series in the card
+   * title, so a one-entry legend repeats the heading and costs a strip of plot
+   * area. Set true only if a second series is ever added to the same axes.
+   */
+  showLegend?: boolean
+  /** Overrides the minimum span declared for this key in TREND_MIN_SPAN. */
+  minSpan?: number
 }) {
+  // The y-domain is computed here rather than left to Recharts, because the
+  // default auto-scale fits the axis to the data extremes: steady-state flow on
+  // this rig spans 0.16 L/min, and that renders as a full-height sawtooth that
+  // reads as instability. See lib/chartDomain.ts.
+  const values = data
+    .map((row) => (row as Record<string, unknown>)[dataKey])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+
+  const domain = trendDomain(values, {
+    key: dataKey,
+    referenceLevels: warningLevel === undefined ? undefined : [warningLevel],
+    minSpanOverride: minSpan,
+  })
+
+  // Reserve the bottom strip for the legend only when there is one.
+  const margin = showLegend ? STACKED_MARGIN : { ...STACKED_MARGIN, bottom: 28 }
+
   return (
     <ChartFrame height={height}>
-      <LineChart data={data} margin={STACKED_MARGIN}>
+      <LineChart data={data} margin={margin}>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
         <XAxis
           {...axisProps}
@@ -868,7 +998,7 @@ export function TrendChart({
           tickFormatter={(v: number) => `${v.toFixed(0)}`}
           label={xAxisLabel('Elapsed (s)')}
         />
-        <YAxis {...axisProps} width={56} domain={['auto', 'auto']} />
+        <YAxis {...axisProps} width={Y_AXIS_WIDTH} domain={domain} />
         <Tooltip content={<ChartTooltip labelUnit="s" valueUnit={unit} />} />
         {warningLevel !== undefined && (
           <ReferenceLine
@@ -892,7 +1022,7 @@ export function TrendChart({
           dot={false}
           isAnimationActive={false}
         />
-        <Legend wrapperStyle={STACKED_LEGEND_STYLE} />
+        {showLegend && <Legend wrapperStyle={STACKED_LEGEND_STYLE} />}
       </LineChart>
     </ChartFrame>
   )
