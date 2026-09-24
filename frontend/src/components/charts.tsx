@@ -1065,6 +1065,11 @@ export function TrendChart({
             // Pinned to the edge the limit is beyond, with an arrow saying which
             // way. The line itself is never drawn, because drawing it would mean
             // widening the axis to reach it.
+            //
+            // The value is shown; the distance to it is not. Both numbers are
+            // already on the chart, so the subtraction is the reader's, and a
+            // live "1.8 mm/s to limit" readout would change every frame, sit in
+            // the corner, and go unread. See limitPlacement for the full trade.
             y={showLimitAbove ? axis.high : axis.low}
             stroke="none"
             label={{

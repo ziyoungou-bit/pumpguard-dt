@@ -248,8 +248,30 @@ export function trendYAxis(
  * Where a limit line sits relative to the axis.
  *
  * Outside the domain the line is not drawn and the axis is not widened; the
- * caller places a marker above the plot instead, so the reader learns both that
- * the limit is off-screen and what it is. Inside, the line is drawn as before.
+ * caller places a marker on the plot edge instead, so the reader learns both
+ * that the limit is off-screen and which way.
+ *
+ * The marker answers three questions and no others: is the limit off-screen,
+ * in which direction, and what is its value. It deliberately does not report
+ * the distance to the limit. A reader who wants that subtraction has both
+ * numbers on the chart -- the axis endpoint on one side, the limit in the
+ * marker -- and can do it themselves. Expressing it in the marker would mean
+ * compressing the axis or introducing a scale break, which shrinks the curve
+ * again: the exact defect these rounds have been removing.
+ *
+ * The underlying trade, stated once: a trend chart's job is to show how the
+ * data itself is moving, not how far it is from its limit. Distance-to-limit
+ * belongs to the status tiles and the health index, which already carry it. And
+ * a limit sitting well off the axis is itself information -- it says the
+ * machine is running comfortably, which is a thing the reader is entitled to
+ * see without a number attached to it.
+ *
+ * No consumer reaches the 'below' branch today: Trends.tsx configures no limit
+ * for the one signal that can produce it. It is implemented rather than left
+ * out because the failure would be silent -- line not drawn, marker not drawn,
+ * nothing said -- and because a low-side limit goes below the axis far more
+ * often than a high-side one goes above it. Any signal running well above its
+ * alarm shows 'below', not 'inside'.
  */
 export function limitPlacement(limit: number, axis: YAxis): 'inside' | 'above' | 'below' {
   if (limit > axis.high) return 'above'
