@@ -1,70 +1,149 @@
 /**
- * D1. Steady-state noise must not fill the plot.
+ * E1. Axis endpoints and ticks are exactly the numbers they are meant to be.
  *
- * The measured case: flow on this rig sits inside 115.44-115.60 L/min. Fitted
- * to its own extremes that 0.16 L/min band renders as a full-height sawtooth and
- * reads as violent instability. Against the declared minimum span it is a flat
- * line, which is what a machine holding 115.5 L/min actually looks like.
+ * The first version of this computed a span as `centre +/- span/2` scaled by
+ * 1.1, so the endpoints carried binary float residue and the labels printed
+ * 115.50000000000001 and 1.2000000000000002. Alignment onto a 1/2/5 x 10^n step
+ * ladder is what removes it, and the assertions below compare strings, because
+ * toBe() on 115.5 would pass even when the axis holds 115.50000000000001.
  *
- * D2. A limit line must stay on screen. A vibration trend whose job is to show
- * distance-to-alarm cannot crop the alarm out of frame to make the curve look
- * calmer.
+ * E2. Ticks print no more precision than their own step carries.
  *
- * D3. Physical bounds are not negotiable. A negative vibration velocity on an
- * axis is worse than a noisy one.
+ * A bearing temperature axis reading 22.495 / 37.495 / 52.495 is the symptom of
+ * deriving decimals from the raw float instead of from the step.
+ *
+ * E3. A limit line off the axis does not widen the axis.
+ *
+ * Stretching a 0.5-1.8 mm/s vibration trend to reach a 4.5 mm/s trip line drew
+ * the machine as a flat line on the floor -- the same defect as the
+ * noise-filled axis this module exists to remove, with the sign flipped.
  */
 
 import { describe, expect, it } from 'vitest'
-import { TREND_MIN_SPAN, trendDomain } from './chartDomain'
+import {
+  TREND_MIN_SPAN,
+  formatTick,
+  limitPlacement,
+  niceStep,
+  stepDigits,
+  trendYAxis,
+} from './chartDomain'
 
-describe('D1. the minimum span holds a quiet signal flat', () => {
-  it('gives the measured flow band a span near 8 L/min, not 0.16', () => {
+describe('E1. endpoints sit exactly on the step ladder', () => {
+  it('produces no float residue on a flow trend in the hundreds', () => {
     const quiet = Array.from({ length: 60 }, (_, i) => 115.44 + (i % 5) * 0.04)
-    const [low, high] = trendDomain(quiet, { key: 'flow_lpm' })
-    expect(high - low).toBeGreaterThanOrEqual(TREND_MIN_SPAN.flow_lpm.minSpan)
-    // The curve now occupies well under a fifth of the plot height.
-    expect((Math.max(...quiet) - Math.min(...quiet)) / (high - low)).toBeLessThan(0.2)
+    const axis = trendYAxis(quiet, { key: 'flow_lpm' })
+    expect(String(axis.low)).toBe(formatTick(axis.low, axis.digits))
+    expect(String(axis.high)).toBe(formatTick(axis.high, axis.digits))
+    expect(formatTick(axis.low, axis.digits)).not.toContain('0000000')
+    expect(formatTick(axis.high, axis.digits)).not.toContain('0000000')
   })
 
-  it('lets a real excursion expand the axis past the minimum', () => {
-    // A 12 L/min swing is wider than the 8 L/min minimum, so the axis follows it.
-    const [low, high] = trendDomain([110, 122], { key: 'flow_lpm' })
-    expect(high - low).toBeGreaterThan(8)
-    expect(low).toBeLessThan(110)
-    expect(high).toBeGreaterThan(122)
+  it('produces no float residue on a sub-unit vibration trend', () => {
+    const axis = trendYAxis([0.2, 0.3], { key: 'vibration_rms_mm_s' })
+    expect(formatTick(axis.low, axis.digits)).not.toContain('0000000')
+    expect(formatTick(axis.high, axis.digits)).not.toContain('0000000')
+    // 1.2000000000000002 was the value that exposed this.
+    expect(formatTick(axis.high, axis.digits)).toBe(String(axis.high))
   })
 
-  it('follows the data when cheap, and never returns a zero-width domain', () => {
-    const [low, high] = trendDomain([100, 100], { key: 'flow_lpm' })
-    expect(high - low).toBeGreaterThan(0)
-    expect(low).toBeGreaterThanOrEqual(0)
+  it('places every step multiple on the ladder', () => {
+    for (const key of Object.keys(TREND_MIN_SPAN)) {
+      const axis = trendYAxis([1, 2, 3], { key })
+      const lowestMultiple = Math.round(axis.low / axis.step) * axis.step
+      const highestMultiple = Math.round(axis.high / axis.step) * axis.step
+      expect(formatTick(lowestMultiple, axis.digits)).toBe(formatTick(axis.low, axis.digits))
+      expect(formatTick(highestMultiple, axis.digits)).toBe(formatTick(axis.high, axis.digits))
+    }
   })
 
-  it('falls back to a usable domain for an empty series', () => {
-    const [low, high] = trendDomain([], { key: 'flow_lpm' })
-    expect(high).toBeGreaterThan(low)
-  })
-})
-
-describe('D2. limit lines are kept in frame', () => {
-  it('raises the upper bound to the vibration trip line', () => {
-    const quiet = [0.2, 0.25, 0.3, 0.22]
-    const [low, high] = trendDomain(quiet, { key: 'vibration_rms_mm_s', referenceLevels: [4.5] })
-    expect(high).toBeGreaterThan(4.5)
-    // The trace is consequently compressed, which is the acknowledged
-    // trade-off: the reader learns the machine is quiet AND far from trip.
-    expect(low).toBeGreaterThanOrEqual(0)
-  })
-
-  it('expands downward for a low-side limit', () => {
-    const [low] = trendDomain([1.8, 1.9], { key: 'npsh_margin_m', referenceLevels: [-0.5] })
-    expect(low).toBeLessThan(-0.5)
+  it('uses a 1/2/5 x 10^n step', () => {
+    for (const range of [0.016, 0.16, 1.6, 16, 160, 1600, 0.00016]) {
+      const step = niceStep(range)
+      const mantissa = step / 10 ** Math.floor(Math.log10(step))
+      expect([1, 2, 5, 10]).toContain(Number(mantissa.toFixed(6)))
+    }
   })
 })
 
-describe('D3. physical bounds are clamped', () => {
-  it('never shows a negative span for a non-negative quantity', () => {
-    const keys = [
+describe('E2. tick precision follows the step', () => {
+  it('prints a 0.5 step to one decimal', () => {
+    expect(stepDigits(0.5)).toBe(1)
+    expect(formatTick(115.5, 1)).toBe('115.5')
+  })
+
+  it('prints a 2 step with no decimals', () => {
+    expect(stepDigits(2)).toBe(0)
+    expect(formatTick(26, 0)).toBe('26')
+  })
+
+  it('prints a 0.001 step to three decimals', () => {
+    expect(stepDigits(0.001)).toBe(3)
+    expect(formatTick(0.123, 3)).toBe('0.123')
+  })
+
+  it('never prints more decimals than the step needs, on any signal', () => {
+    for (const key of Object.keys(TREND_MIN_SPAN)) {
+      const axis = trendYAxis([1.234567, 2.345678], { key })
+      const allowed = stepDigits(axis.step)
+      for (let value = axis.low; value <= axis.high + axis.step / 2; value += axis.step) {
+        const text = formatTick(value, axis.digits)
+        const decimals = text.includes('.') ? text.split('.')[1].length : 0
+        expect(decimals, `${key} tick ${text}`).toBeLessThanOrEqual(allowed)
+        // And the printed label must read back as the number it names, so the
+        // reader is not shown one value where the axis holds another.
+        expect(Number(text), `${key} tick ${text}`).toBeCloseTo(value, allowed)
+      }
+    }
+  })
+
+  it('keeps the bearing temperature axis on round numbers', () => {
+    // The reported symptom: 22.495 / 37.495 / 52.495.
+    const axis = trendYAxis([22.1, 27.4], { key: 'bearing_temperature_c' })
+    const ticks: string[] = []
+    for (let value = axis.low; value <= axis.high + axis.step / 2; value += axis.step) {
+      ticks.push(formatTick(value, axis.digits))
+    }
+    for (const tick of ticks) {
+      expect(tick).not.toContain('495')
+      expect(Number(tick) % axis.step).toBeCloseTo(0, 6)
+    }
+  })
+})
+
+describe('E3. an off-axis limit does not widen the axis', () => {
+  it('leaves the vibration axis near the data, not near the 4.5 mm/s trip', () => {
+    const axis = trendYAxis([0.5, 1.8], { key: 'vibration_rms_mm_s' })
+    expect(axis.high).toBeLessThan(4.5)
+    expect(limitPlacement(4.5, axis)).toBe('above')
+  })
+
+  it('leaves the bearing temperature axis near the data, not near the 80 degC alarm', () => {
+    const axis = trendYAxis([22.1, 27.4], { key: 'bearing_temperature_c' })
+    expect(axis.high).toBeLessThan(80)
+    expect(limitPlacement(80, axis)).toBe('above')
+  })
+
+  it('reports a limit inside the axis as inside', () => {
+    const axis = trendYAxis([4.0, 5.2], { key: 'vibration_rms_mm_s' })
+    expect(limitPlacement(4.5, axis)).toBe('inside')
+  })
+
+  it('reports a low-side limit below the axis', () => {
+    const axis = trendYAxis([1.8, 1.9], { key: 'npsh_margin_m' })
+    expect(limitPlacement(-0.5, axis)).toBe('below')
+  })
+
+  it('gives a wide excursion an axis that follows it', () => {
+    const axis = trendYAxis([110, 122], { key: 'flow_lpm' })
+    expect(axis.low).toBeLessThan(110)
+    expect(axis.high).toBeGreaterThan(122)
+  })
+})
+
+describe('E4. physical bounds still hold', () => {
+  it('never shows a negative axis for a non-negative quantity', () => {
+    for (const key of [
       'vibration_rms_mm_s',
       'amplitude_1x_mm_s',
       'amplitude_2x_mm_s',
@@ -75,61 +154,92 @@ describe('D3. physical bounds are clamped', () => {
       'pump_efficiency',
       'health_index',
       'anomaly_score',
-    ]
-    for (const key of keys) {
-      // Values hugging the bottom of the range: the case where centring the
-      // span would have pushed the domain below zero.
-      const [low] = trendDomain([0.02, 0.03], { key })
-      expect(low).toBeGreaterThanOrEqual(0)
+    ]) {
+      const axis = trendYAxis([0.02, 0.03], { key })
+      expect(axis.low, key).toBeGreaterThanOrEqual(0)
     }
   })
 
   it('caps a bounded quantity at its ceiling', () => {
-    const [low, high] = trendDomain([0.97, 0.99], { key: 'pump_efficiency' })
-    expect(high).toBeLessThanOrEqual(1)
-    expect(low).toBeGreaterThanOrEqual(0)
-    // The data itself must stay inside the axis even after the clamp.
-    expect(low).toBeLessThanOrEqual(0.97)
+    const axis = trendYAxis([0.97, 0.99], { key: 'pump_efficiency' })
+    expect(axis.high).toBeLessThanOrEqual(1)
+    expect(axis.low).toBeLessThanOrEqual(0.97)
   })
 
-  it('keeps the health index inside 0..100', () => {
-    const [, high] = trendDomain([98, 99], { key: 'health_index' })
-    expect(high).toBeLessThanOrEqual(100)
+  it('allows a negative axis for the NPSH margin, and only there', () => {
+    // Margin goes negative when the pump cavitates; that is the whole point of
+    // the signal. Data has to approach zero for the axis to reach below it --
+    // `nonNegative: false` permits a negative axis, it does not require one.
+    const axis = trendYAxis([0.05, 0.2], { key: 'npsh_margin_m' })
+    expect(axis.low).toBeLessThan(0)
+    // And the same data on a quantity that cannot go negative stays non-negative.
+    const positive = trendYAxis([0.05, 0.2], { key: 'pump_head_m' })
+    expect(positive.low).toBeGreaterThanOrEqual(0)
+  })
+
+  it('keeps the readings inside the axis on every signal', () => {
+    // Each signal is exercised with data inside its own physical bounds, since
+    // an out-of-bounds reading is a contract violation rather than an axis bug.
+    for (const key of Object.keys(TREND_MIN_SPAN)) {
+      const bounds = TREND_MIN_SPAN[key]
+      const low = bounds.floor ?? 0.2
+      const high = bounds.ceiling === undefined ? low + 1.4 : Math.min(bounds.ceiling, low + 1.4)
+      const axis = trendYAxis([low, high], { key })
+      expect(axis.low, key).toBeLessThanOrEqual(low)
+      expect(axis.high, key).toBeGreaterThanOrEqual(high)
+      expect(axis.high, key).toBeGreaterThan(axis.low)
+      expect(axis.step, key).toBeGreaterThan(0)
+    }
+  })
+
+  it('gives up the physical ceiling before it gives up the axis', () => {
+    // An out-of-bounds reading is a contract violation, not an axis case. The
+    // ceiling wins: an efficiency axis labelled 4.7 would present broken data as
+    // legitimate. The reading goes off the top of the plot, which is the visible
+    // failure the reader should see.
+    const axis = trendYAxis([1.3, 4.7], { key: 'pump_efficiency' })
+    expect(axis.high).toBeLessThanOrEqual(1)
+    expect(axis.low).toBeLessThanOrEqual(1.3)
+    expect(axis.high).toBeGreaterThan(axis.low)
   })
 })
 
-describe('D4. a clamped quantity still gets a usable span', () => {
-  it('does not collapse the span against the floor', () => {
-    // Regression: centring a 1.0 mm/s span on 0.25 mm/s and then clamping to 0
-    // left a 0.55 mm/s axis, so the noise filled it again. The span must grow
-    // upward from the floor instead.
-    //
-    // The curve consequently sits against the top of the axis -- the 10%
-    // headroom applies to the data's own extent, and a span floored at zero has
-    // nowhere below to go. That is the accepted trade: the alternative is a
-    // negative velocity axis, which costs more.
-    const [low, high] = trendDomain([0.2, 0.3], { key: 'vibration_rms_mm_s' })
-    expect(low).toBe(0)
-    expect(high).toBeGreaterThanOrEqual(TREND_MIN_SPAN.vibration_rms_mm_s.minSpan)
-    expect(high).toBeGreaterThanOrEqual(0.3)
+describe('E5. the minimum span is what keeps a quiet signal flat', () => {
+  it('gives the measured flow band a span near 8 L/min, not 0.16', () => {
+    const quiet = Array.from({ length: 60 }, (_, i) => 115.44 + (i % 5) * 0.04)
+    const axis = trendYAxis(quiet, { key: 'flow_lpm' })
+    expect(axis.high - axis.low).toBeGreaterThanOrEqual(TREND_MIN_SPAN.flow_lpm.minSpan)
+    expect((Math.max(...quiet) - Math.min(...quiet)) / (axis.high - axis.low)).toBeLessThan(0.2)
+  })
+
+  it('holds a span against the floor instead of collapsing onto it', () => {
+    const axis = trendYAxis([0.2, 0.3], { key: 'vibration_rms_mm_s' })
+    expect(axis.low).toBe(0)
+    expect(axis.high).toBeGreaterThanOrEqual(TREND_MIN_SPAN.vibration_rms_mm_s.minSpan)
+    expect(axis.high).toBeGreaterThanOrEqual(0.3)
   })
 
   it('honours an explicit per-chart override over the table', () => {
     const quiet = [115.4, 115.6]
-    const [lowOverride, highOverride] = trendDomain(quiet, { key: 'flow_lpm', minSpanOverride: 40 })
-    const [lowDefault, highDefault] = trendDomain(quiet, { key: 'flow_lpm' })
+    const wide = trendYAxis(quiet, { key: 'flow_lpm', minSpanOverride: 40 })
+    const normal = trendYAxis(quiet, { key: 'flow_lpm' })
+    expect(wide.high - wide.low).toBeGreaterThanOrEqual(40)
+    expect(normal.high - normal.low).toBeLessThan(wide.high - wide.low)
+    expect(wide.low).toBeLessThanOrEqual(115.4)
+    expect(wide.high).toBeGreaterThanOrEqual(115.6)
+  })
 
-    // The override widens the axis beyond both the table value and the data.
-    expect(highOverride - lowOverride).toBeGreaterThanOrEqual(40)
-    expect(highDefault - lowDefault).toBeLessThan(highOverride - lowOverride)
-    // Widening must not move the data outside the axis.
-    expect(lowOverride).toBeLessThanOrEqual(115.4)
-    expect(highOverride).toBeGreaterThanOrEqual(115.6)
+  it('falls back to a usable axis for an empty series', () => {
+    for (const key of Object.keys(TREND_MIN_SPAN)) {
+      const axis = trendYAxis([], { key })
+      expect(axis.high, key).toBeGreaterThan(axis.low)
+      expect(axis.step, key).toBeGreaterThan(0)
+    }
   })
 })
 
-describe('D5. the table itself', () => {
-  it('declares a span and sane bounds for every trend signal', () => {
+describe('E6. the table itself', () => {
+  it('declares a positive span for every signal', () => {
     for (const [key, bounds] of Object.entries(TREND_MIN_SPAN)) {
       expect(bounds.minSpan, `${key} needs a positive span`).toBeGreaterThan(0)
       if (bounds.floor !== undefined && bounds.ceiling !== undefined) {

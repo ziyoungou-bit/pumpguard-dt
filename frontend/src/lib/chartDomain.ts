@@ -110,95 +110,149 @@ export const TREND_MIN_SPAN: Record<string, Bounds> = {
   anomaly_score: { floor: 0, ceiling: 1, minSpan: 0.1 },
 }
 
+/** A y-axis domain. Tick positions are multiples of `step` from `low` to `high`. */
+export interface YAxis {
+  low: number
+  high: number
+  step: number
+  /** Decimal places implied by `step`, and the only precision ticks may print. */
+  digits: number
+}
+
 /**
- * Compute a y-axis domain for a trend.
+ * Nice step: the 1/2/5 x 10^n ladder.
  *
- * `values` are the plotted series; `referenceLevels` are the horizontal limit
- * lines. A limit line widens the domain, because a chart whose job is to show
- * distance-to-alarm must keep the alarm on screen -- a span that quietly crops
- * the 4.5 mm/s trip line out of a vibration trend is worse than a noisy plot.
- * The line adds a margin rather than stretching the axis to a multiple of
- * itself, so a limit far from the data does not rescale everything under it.
+ * Ticks at arbitrary float positions are unreadable -- a bearing temperature
+ * axis that reads 22.495 / 37.495 / 52.495 is the symptom. Snapping the span to
+ * this ladder means every tick lands on a number a person would have chosen.
  */
-export function trendDomain(
+export function niceStep(range: number, targetTicks = 5): number {
+  if (!(range > 0) || !Number.isFinite(range)) return 1
+  const rough = range / Math.max(targetTicks, 1)
+  const magnitude = 10 ** Math.floor(Math.log10(rough))
+  const normalised = rough / magnitude
+  const ladder = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10
+  return ladder * magnitude
+}
+
+/**
+ * Decimal places a step needs, so labels print no more precision than the step
+ * carries. A step of 0.5 needs one place; a step of 2 needs none. Computed by
+ * string inspection rather than by log10, because log10(0.001) is not exactly
+ * -3 in binary floating point and the error shows up in the label.
+ */
+export function stepDigits(step: number): number {
+  if (!Number.isFinite(step) || step <= 0) return 0
+  let text = step.toFixed(10)
+  if (text.includes('e') || text.includes('E')) text = step.toPrecision(12)
+  text = text.replace(/0+$/, '')
+  const dot = text.indexOf('.')
+  return dot === -1 ? 0 : text.length - dot - 1
+}
+
+/** Format a tick at the precision its own step implies. */
+export function formatTick(value: number, digits: number): string {
+  // toFixed, not toPrecision: toPrecision switches to exponential notation for
+  // small magnitudes, and "1.2e-7" is not a tick label anyone wants.
+  return value.toFixed(Math.min(Math.max(digits, 0), 20))
+}
+
+/**
+ * Round a domain outward onto the step ladder.
+ *
+ * Rounding outward rather than inward matters: an inward round can push a data
+ * point off the plot, and a trend chart that hides its own readings is worse
+ * than one with a slightly loose axis.
+ */
+function alignToStep(low: number, high: number, step: number): { low: number; high: number } {
+  const lowAligned = Math.floor(low / step) * step
+  const highAligned = Math.ceil(high / step) * step
+  return { low: lowAligned, high: highAligned }
+}
+
+/**
+ * Compute a y-axis for a trend.
+ *
+ * The span is decided by the data and the declared minimum, and by nothing else.
+ * A limit line does not widen it: a vibration trend whose data sits at 0.5-1.8
+ * mm/s, stretched to reach a 4.5 mm/s trip line, draws the machine as a flat
+ * line pinned to the floor -- which is the same defect as the noise-filled axis
+ * this module was written to remove, with the sign flipped. Distance-to-alarm is
+ * carried by a marker above the plot instead; see `limitPlacement`.
+ */
+export function trendYAxis(
   values: number[],
-  options: {
-    key: string
-    referenceLevels?: number[]
-    minSpanOverride?: number
-  },
-): [number, number] {
+  options: { key: string; minSpanOverride?: number },
+): YAxis {
   const bounds = TREND_MIN_SPAN[options.key] ?? { minSpan: 0 }
   const minSpan = Math.max(options.minSpanOverride ?? 0, bounds.minSpan)
 
-  const finite = values.filter((value) => Number.isFinite(value))
-  const levels = (options.referenceLevels ?? []).filter((value) => Number.isFinite(value))
+  const clampLow = bounds.floor ?? (bounds.nonNegative === false ? Number.NEGATIVE_INFINITY : 0)
+  const clampHigh = bounds.ceiling ?? Number.POSITIVE_INFINITY
 
-  if (finite.length === 0 && levels.length === 0) {
-    const low = bounds.floor ?? 0
-    return [low, low + Math.max(minSpan, 1)]
+  const finite = values.filter((value) => Number.isFinite(value))
+  if (finite.length === 0) {
+    const low = Number.isFinite(clampLow) ? clampLow : 0
+    const step = niceStep(Math.max(minSpan, 1))
+    return { low, high: low + step * 5, step, digits: stepDigits(step) }
   }
 
-  // Where the axis may not go. A quantity is non-negative unless it says
-  // otherwise, so the absence of a declared floor is not permission to draw a
-  // negative axis: flow, speed and the vibration amplitudes all default to a
-  // floor of zero here rather than relying on the clamp to catch a span that
-  // wandered below it. Only a quantity that can genuinely read negative sets
-  // `floor` itself -- the NPSH margin is the only one on this page.
-  const clampLow =
-    bounds.floor ?? (bounds.nonNegative === false ? Number.NEGATIVE_INFINITY : 0)
-  const clampHigh = bounds.ceiling ?? Number.POSITIVE_INFINITY
-  const dataLow = finite.length > 0 ? Math.min(...finite) : clampLow
-  const dataHigh = finite.length > 0 ? Math.max(...finite) : clampHigh
-  const dataSpan = Math.max(dataHigh - dataLow, 0)
+  const dataLow = Math.min(...finite)
+  const dataHigh = Math.max(...finite)
+  const dataSpan = dataHigh - dataLow
 
-  // Two different reasons for an axis to be wider than the data.
-  //
-  // The span itself is always about the data: the declared minimum, or the
-  // data's own extent plus 20% of margin for it to move in. It is then centred
-  // on the data. Centring is not decoration -- a flow holding 115.5 L/min drawn
-  // on a 0-8 L/min axis is a line pinned to the top edge, which reads as a
-  // worse fault than the one this module exists to remove.
-  //
-  // The declared floor is a clamp on the result, not the place the span starts.
-  // Anchoring at the floor is only correct for a quantity that actually
-  // operates near it, and this rig does not: its flow is 115, its temperatures
-  // are 40, and its speed is 1450.
-  const target = dataSpan >= minSpan ? dataSpan * 1.2 : minSpan * 1.2
+  // Two reasons for an axis wider than the data. The span is always about the
+  // data: the declared minimum, or the data's own extent plus 20% of margin for
+  // it to move in. It is then centred, because a flow holding 115.5 L/min on a
+  // 0-8 L/min axis is a line pinned to the top edge -- as unreadable as one
+  // pinned to the bottom.
+  const span = dataSpan >= minSpan ? dataSpan * 1.2 : minSpan * 1.2
   const centre = (dataLow + dataHigh) / 2
-  let low = centre - target / 2
-  let high = centre + target / 2
+  let low = centre - span / 2
+  let high = centre + span / 2
 
-  // Against a floor, slide the window up rather than truncating it: the span is
+  // Against a floor, slide the window up rather than truncating it. The span is
   // what keeps noise from filling the plot, so it is worth preserving.
-  if (low < clampLow) {
+  if (Number.isFinite(clampLow) && low < clampLow) {
     high += clampLow - low
     low = clampLow
   }
-  if (clampHigh !== Number.POSITIVE_INFINITY && high > clampHigh) {
+  if (Number.isFinite(clampHigh) && high > clampHigh) {
     low -= high - clampHigh
     high = clampHigh
   }
 
-  // Limit lines are pulled inside the domain, with an additive margin: a
-  // multiplicative one shrinks a negative bound toward zero, which puts a
-  // low-side limit like the -0.5 m NPSH trip line outside the axis.
-  if (levels.length > 0) {
-    const margin = Math.max((high - low) * 0.1, Number.EPSILON)
-    const limitTop = Math.max(...levels)
-    const limitBottom = Math.min(...levels)
-    if (limitBottom < low) low = limitBottom - margin
-    if (limitTop > high) high = limitTop + margin
-  }
+  // Snap outward onto the step ladder, then re-apply the bounds. Order matters:
+  // the snap is what removes the float residue (115.50000000000001 becomes 115.5
+  // on a 0.5 step), but it can also push an endpoint past a floor or a ceiling,
+  // so the clamp has to come after it rather than before.
+  const step = niceStep(high - low)
+  const aligned = alignToStep(low, high, step)
 
-  // Final clamp, then make sure the data itself is still in frame. An axis that
-  // respects the physical floor must not end up above its own readings.
-  low = Math.max(low, clampLow)
-  high = Math.min(high, clampHigh)
-  if (finite.length > 0) {
-    if (low > dataLow) low = Math.max(dataLow, clampLow)
-    if (high < dataHigh) high = Math.min(dataHigh, clampHigh)
-  }
+  let finalLow = aligned.low
+  let finalHigh = aligned.high
 
-  return [low, high]
+  if (Number.isFinite(clampLow) && finalLow < clampLow) finalLow = clampLow
+  if (Number.isFinite(clampHigh) && finalHigh > clampHigh) finalHigh = clampHigh
+
+  // Last: whatever the snap or the clamp did, the readings stay in frame. The
+  // snap can round the axis inward past a data point, and a trend chart that
+  // hides its own readings is worse than one with a loose axis.
+  if (finalLow > dataLow) finalLow = Math.max(dataLow, clampLow)
+  if (finalHigh < dataHigh) finalHigh = Math.min(dataHigh, clampHigh)
+
+  return { low: finalLow, high: finalHigh, step, digits: stepDigits(step) }
+}
+
+/**
+ * Where a limit line sits relative to the axis.
+ *
+ * Outside the domain the line is not drawn and the axis is not widened; the
+ * caller places a marker above the plot instead, so the reader learns both that
+ * the limit is off-screen and what it is. Inside, the line is drawn as before.
+ */
+export function limitPlacement(limit: number, axis: YAxis): 'inside' | 'above' | 'below' {
+  if (limit > axis.high) return 'above'
+  if (limit < axis.low) return 'below'
+  return 'inside'
 }

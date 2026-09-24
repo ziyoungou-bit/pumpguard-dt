@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { trendDomain } from '../lib/chartDomain'
+import { formatTick, limitPlacement, trendYAxis } from '../lib/chartDomain'
 import { labelRowCount, labelStackTopMargin, layoutLabels, type LabelSlot } from '../lib/chartLabels'
 import {
   Area,
@@ -55,6 +55,22 @@ const INK = '#52514e'
 
 /** Matches the YAxis width below, and the space the axis label needs. */
 const Y_AXIS_WIDTH = 56
+
+/**
+ * Width for a y-axis, from the widest tick it will actually print.
+ *
+ * A fixed 56px was clipping the leading digits off labels like "115.5" on the
+ * flow trend -- the axis had been sized for the two-digit spans of the pump
+ * curves. The width is derived from the formatted text instead, so a trend in
+ * the hundreds gets the room and a trend in single digits does not pay for it.
+ *
+ * 7px per character is the advance width of Inter's tabular digits at 11px,
+ * rounded up; `numeric` figures are fixed-width, so the estimate is exact for
+ * digit strings and generous for anything with a minus sign.
+ */
+function yAxisWidth(widestTick: string): number {
+  return Math.max(28, Math.ceil(widestTick.length * 7 + 12))
+}
 
 /**
  * Marker colours for the spectrum panel. The line frequency is deliberately
@@ -969,7 +985,7 @@ export function TrendChart({
   /** Overrides the minimum span declared for this key in TREND_MIN_SPAN. */
   minSpan?: number
 }) {
-  // The y-domain is computed here rather than left to Recharts, because the
+  // The y-axis is computed here rather than left to Recharts, because the
   // default auto-scale fits the axis to the data extremes: steady-state flow on
   // this rig spans 0.16 L/min, and that renders as a full-height sawtooth that
   // reads as instability. See lib/chartDomain.ts.
@@ -977,14 +993,32 @@ export function TrendChart({
     .map((row) => (row as Record<string, unknown>)[dataKey])
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
 
-  const domain = trendDomain(values, {
-    key: dataKey,
-    referenceLevels: warningLevel === undefined ? undefined : [warningLevel],
-    minSpanOverride: minSpan,
-  })
+  const axis = trendYAxis(values, { key: dataKey, minSpanOverride: minSpan })
 
-  // Reserve the bottom strip for the legend only when there is one.
-  const margin = showLegend ? STACKED_MARGIN : { ...STACKED_MARGIN, bottom: 28 }
+  // Ticks are formatted at the precision their own step implies, so a 0.5 step
+  // prints 115.5 rather than 115.50000000000001. The axis is then widened to fit
+  // whatever that formatting produced -- sizing it first and clipping after is
+  // what cut the leading digits off every label.
+  const tickTexts: string[] = []
+  for (let value = axis.low; value <= axis.high + axis.step / 2; value += axis.step) {
+    tickTexts.push(formatTick(value, axis.digits))
+  }
+  const widestTick = tickTexts.reduce((widest, text) => (text.length > widest.length ? text : widest), '')
+  const axisWidth = yAxisWidth(widestTick)
+
+  // A limit line inside the domain is drawn where it always was. Outside it, the
+  // axis is NOT widened to reach it -- that is what flattened every curve to the
+  // floor -- and a marker above the plot says the limit is off-screen and what
+  // its value is.
+  const limitSide = warningLevel === undefined ? 'inside' : limitPlacement(warningLevel, axis)
+  const showLimitLine = warningLevel !== undefined && limitSide === 'inside'
+  const showLimitMarker = warningLevel !== undefined && limitSide === 'above'
+  const limitColour = '#d03b3b'
+
+  // Reserve the bottom strip for the legend only when there is one, and the top
+  // for the off-screen limit marker when there is one.
+  const baseMargin = showLegend ? STACKED_MARGIN : { ...STACKED_MARGIN, bottom: 28 }
+  const margin = showLimitMarker ? { ...baseMargin, top: baseMargin.top + 14 } : baseMargin
 
   return (
     <ChartFrame height={height}>
@@ -998,18 +1032,38 @@ export function TrendChart({
           tickFormatter={(v: number) => `${v.toFixed(0)}`}
           label={xAxisLabel('Elapsed (s)')}
         />
-        <YAxis {...axisProps} width={Y_AXIS_WIDTH} domain={domain} />
+        <YAxis
+          {...axisProps}
+          width={axisWidth}
+          domain={[axis.low, axis.high]}
+          tickCount={Math.round((axis.high - axis.low) / axis.step) + 1}
+          tickFormatter={(v: number) => formatTick(v, axis.digits)}
+        />
         <Tooltip content={<ChartTooltip labelUnit="s" valueUnit={unit} />} />
-        {warningLevel !== undefined && (
+        {warningLevel !== undefined && showLimitLine && (
           <ReferenceLine
             y={warningLevel}
-            stroke="#d03b3b"
+            stroke={limitColour}
             strokeDasharray="5 3"
             label={{
-              value: `Limit ${warningLevel} ${unit}`,
+              value: `Limit ${formatTick(warningLevel, axis.digits)} ${unit}`,
               position: 'right',
-              fill: '#d03b3b',
+              fill: limitColour,
               fontSize: 10,
+            }}
+          />
+        )}
+        {warningLevel !== undefined && showLimitMarker && (
+          <ReferenceLine
+            y={axis.high}
+            stroke="none"
+            label={{
+              value: `Limit ${formatTick(warningLevel, axis.digits)} ${unit} ↑`,
+              position: 'top',
+              fill: limitColour,
+              fontSize: 10,
+              fontWeight: 600,
+              dy: -4,
             }}
           />
         )}
